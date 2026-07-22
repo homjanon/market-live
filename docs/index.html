@@ -8,9 +8,10 @@
   :root{
     --up:#e0392b; --down:#1ba784; --bg:#f5f6f8; --card:#fff;
     --ink:#1f2329; --sub:#8a9099; --line:#eceef1; --blue:#2563eb; --blue2:#3b82f6;
+    --fear:#0ea5e9; --greed:#f59e0b;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{margin:0 auto;max-width:500px;background:var(--bg);color:var(--ink);
+  body{margin:0 auto;max-width:780px;background:var(--bg);color:var(--ink);
     font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
     font-size:14px;line-height:1.5;padding:12px 12px 40px}
   h1{font-size:17px;margin:4px 0 2px;font-weight:700}
@@ -38,7 +39,9 @@
   .bar-row{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px}
   .bar-row .lab{width:64px;color:var(--sub);flex:none}
   .bar-track{flex:1;height:8px;background:var(--line);border-radius:4px;overflow:hidden}
-  .bar-fill{height:100%;background:var(--blue2);border-radius:4px}
+  .bar-fill{height:100%;border-radius:4px}
+  .bar-fill.fear{background:var(--fear)}
+  .bar-fill.greed{background:var(--greed)}
   table{width:100%;border-collapse:collapse;font-size:13px}
   th,td{text-align:right;padding:7px 6px;border-bottom:1px solid var(--line)}
   th:first-child,td:first-child{text-align:left}
@@ -72,7 +75,7 @@
 
 <script>
 const POLL_MS = 30 * 60 * 1000;   // 30 分钟自动轮询
-const IS_GH = location.hostname.includes('github.io');  // GitHub Pages 版（国内直连·只读快照）
+const IS_GH = location.hostname.includes('github.io');
 if(IS_GH){ const _b=document.getElementById('refreshBtn'); if(_b) _b.style.display='none'; }
 let timer = null;
 
@@ -113,7 +116,7 @@ async function load(){
     setStatus(true);
   }catch(e){
     document.getElementById('content').innerHTML =
-      '<div class="err">加载失败：' + e.message + '<br>请稍后重试（Cron 每30分钟自动刷新，无需VPN）。</div>';
+      '<div class="err">加载失败：' + e.message + '<br>请稍后重试（Cron 每30分钟自动刷新）。</div>';
     setStatus(false, e.message);
   }finally{
     btn.disabled = false; btn.textContent = '立即刷新';
@@ -134,7 +137,7 @@ async function manualRefresh(){
   const btn = document.getElementById('refreshBtn');
   btn.disabled = true; btn.textContent = '刷新中…';
   try{
-    if(IS_GH){ alert('GitHub Pages 版为只读快照，刷新由 Cron 每30分钟自动完成（国内直连无需VPN）。'); return; }
+    if(IS_GH){ alert('GitHub Pages 版为只读快照，刷新由 Cron 每30分钟自动完成。'); return; }
     const r = await fetch('/api/refresh', {method:'POST', cache:'no-store'});
     const data = await r.json();
     render(data);
@@ -169,8 +172,8 @@ function renderXXFI(x){
   const [bc, bl] = sigMap[x.contrarian_signal] || ['b-hold','—'];
   const c = x.components || {};
   const f = c.fear||{}, g = c.greed||{};
-  const bar = (lab,v)=>`<div class="bar-row"><span class="lab">${lab}</span>
-    <span class="bar-track"><span class="bar-fill" style="width:${Math.max(0,Math.min(100,v))}%"></span></span>
+  const bar = (lab,v,cls='')=>`<div class="bar-row"><span class="lab">${lab}</span>
+    <span class="bar-track"><span class="bar-fill ${cls}" style="width:${Math.max(0,Math.min(100,v))}%"></span></span>
     <span style="width:34px;text-align:right">${v}</span></div>`;
   return `<div class="card">
     <h2>😨 小旭恐惧指数 XXFI <span class="tag">0–100 · 越高越恐惧</span></h2>
@@ -183,8 +186,13 @@ function renderXXFI(x){
       </div>
     </div>
     <div class="bars">
-      ${bar('回撤', f.drawdown)} ${bar('广度', f.breadth)}
-      ${bar('跌停比', f.limitdown)} ${bar('波动率', f.vol)}
+      ${bar('回撤', f.drawdown, 'fear')} ${bar('广度', f.breadth, 'fear')}
+      ${bar('跌停比', f.limitdown, 'fear')} ${bar('波动率', f.vol, 'fear')}
+    </div>
+    <div class="bars">
+      ${bar('动量', g.momentum, 'greed')} ${bar('涨停比', g.limitup, 'greed')}
+      ${bar('散户追高', g.retailin, 'greed')} ${bar('超买', g.overbought, 'greed')}
+      ${bar('背离', g.divergence, 'greed')}
     </div>
     <div class="advice">${x.advice||''}</div>
   </div>`;
