@@ -222,10 +222,10 @@ function renderBingdian(b, src){
 function renderMarketTables(d){
   const idx = d.indices || {};
   const grp = {
-    'A股': ['上证指数','深证成指','创业板指','沪深300','科创50'],
+    'A股': ['上证指数','深证成指','创业板指','沪深300','科创50','北证50'],
     '港股': ['恒生指数','恒生科技'],
     '美股': ['纳斯达克100','标普500','道琼斯'],
-    '全球': ['日经225','韩国KOSPI','德国DAX'],
+    '全球': ['日经225','韩国KOSPI','德国DAX','欧洲斯托克600','法国CAC40','英国富时100'],
   };
   let h = '';
   for(const [title, names] of Object.entries(grp)){
