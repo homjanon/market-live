@@ -172,8 +172,8 @@ function renderXXFI(x){
   const [bc, bl] = sigMap[x.contrarian_signal] || ['b-hold','—'];
   const c = x.components || {};
   const f = c.fear||{}, g = c.greed||{};
-  const bar = (lab,v,cls='')=>`<div class="bar-row"><span class="lab">${lab}</span>
-    <span class="bar-track"><span class="bar-fill ${cls}" style="width:${Math.max(0,Math.min(100,v))}%"></span></span>
+  const bar = (lab,v,color='')=>`<div class="bar-row"><span class="lab">${lab}</span>
+    <span class="bar-track"><span class="bar-fill" style="width:${Math.max(0,Math.min(100,v))}%${color?';background:'+color:''}"></span></span>
     <span style="width:34px;text-align:right">${v}</span></div>`;
   return `<div class="card">
     <h2>😨 小旭恐惧指数 XXFI <span class="tag">0–100 · 越高越恐惧</span></h2>
@@ -186,13 +186,8 @@ function renderXXFI(x){
       </div>
     </div>
     <div class="bars">
-      ${bar('回撤', f.drawdown, 'fear')} ${bar('广度', f.breadth, 'fear')}
-      ${bar('跌停比', f.limitdown, 'fear')} ${bar('波动率', f.vol, 'fear')}
-    </div>
-    <div class="bars">
-      ${bar('动量', g.momentum, 'greed')} ${bar('涨停比', g.limitup, 'greed')}
-      ${bar('散户追高', g.retailin, 'greed')} ${bar('超买', g.overbought, 'greed')}
-      ${bar('背离', g.divergence, 'greed')}
+      ${bar('回撤', f.drawdown, '#0ea5e9')} ${bar('广度', f.breadth, '#0ea5e9')}
+      ${bar('跌停比', f.limitdown, '#0ea5e9')} ${bar('波动率', f.vol, '#0ea5e9')}
     </div>
     <div class="advice">${x.advice||''}</div>
   </div>`;
