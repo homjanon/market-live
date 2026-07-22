@@ -74,9 +74,9 @@
   <div class="foot">数据源自东财 / 新浪 / 蛋卷 · 自算小旭恐惧指数(XXFI)与A股冰点 · GitHub Pages 国内直连版 · 仅供研究，非投资建议</div>
 
 <script>
-const POLL_MS = 30 * 60 * 1000;   // 30 分钟自动轮询
+const POLL_MS = 30 * 60 * 1000;
 const IS_GH = location.hostname.includes('github.io');
-if(IS_GH){ const _b=document.getElementById('refreshBtn'); if(_b) _b.style.display='none'; }
+if(IS_GH){ const _b=document.getElementById('refreshBtn'); if(_b) _b.style.display='none'; }   // 30 分钟自动轮询
 let timer = null;
 
 function colorCls(v){
@@ -100,7 +100,7 @@ function inWindow(){
   const wd = bj.getUTCDay(); // 0=日
   if(wd === 0 || wd === 6) return false;
   const hm = bj.getUTCHours()*60 + bj.getUTCMinutes();
-  return hm >= 9*60+30 && hm <= 16*60;
+  return hm >= 9*60+30 && hm <= 16*60+15;
 }
 
 async function load(){
