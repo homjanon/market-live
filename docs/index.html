@@ -76,8 +76,6 @@
 <script>
 const POLL_MS = 30 * 60 * 1000;
 const IS_GH = location.hostname.includes('github.io');
-if(IS_GH){ const _b=document.getElementById('refreshBtn'); if(_b) _b.style.display='none'; }
-const IS_GH = location.hostname.includes('github.io');
 if(IS_GH){ const _b=document.getElementById('refreshBtn'); if(_b) _b.style.display='none'; }   // 30 分钟自动轮询
 let timer = null;
 
@@ -139,7 +137,6 @@ async function manualRefresh(){
   const btn = document.getElementById('refreshBtn');
   btn.disabled = true; btn.textContent = '刷新中…';
   try{
-    if(IS_GH){ alert('GitHub Pages 版为只读快照，刷新由 Cron 每30分钟自动完成。'); return; }
     if(IS_GH){ alert('GitHub Pages 版为只读快照，刷新由 Cron 每30分钟自动完成。'); return; }
     const r = await fetch('/api/refresh', {method:'POST', cache:'no-store'});
     const data = await r.json();
