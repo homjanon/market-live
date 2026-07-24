@@ -1,0 +1,16 @@
+name = "market-live"
+main = "worker.py"
+compatibility_date = "2026-07-15"
+compatibility_flags = ["python_workers", "disable_python_external_sdk"]
+account_id = "b65a19ca28101390f1195b5109747815"
+kv_namespaces = [
+  { binding = "KV", id = "cb2f5aca930241d985db5239e0373872" }
+]
+assets = { directory = "./public", binding = "ASSETS" }
+observability = { enabled = true }
+
+# 定时刷新：验证期先用 */30 全天每 30 分触发，确认 scheduled 不再崩溃后改回 mon-fri（9:45–16:15）
+[triggers]
+crons = [
+  "*/30 * * * *"             # 验证期：全天每 30 分钟触发（确认修复后再改回 mon-fri）
+]
