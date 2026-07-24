@@ -44,7 +44,7 @@
 └─────────────────┘  └──────────────────────────┘
 ```
 
-**核心逻辑**：Worker 每30分钟采集10路数据源 → 计算 XXFI + 冰点 → 同时写入 KV（供 VPN 版读取）和推送到 GitHub Pages（供国内直连）。
+**核心逻辑**：Worker 每30分钟（全天）采集10路数据源 → 计算 XXFI + 冰点 → 同时写入 KV（供 workers.dev 版读取）和推送到 GitHub Pages（供国内直连）。
 
 ---
 
@@ -52,21 +52,20 @@
 
 | 规则 | 值 |
 |---|---|
-| **Cron**（UTC） | `45 1` / `15,45 2-7` / `15 8` `* * mon-fri`（3 段，共 14 次/交易日） |
-| **Cron**（北京） | `9:45, 10:15, 10:45, …, 16:15`（每 30 分钟） |
-| **首次触发** | 北京 **9:45** |
-| **末次触发** | 北京 **16:15** |
-| **交易日** | Cron 已限定 `mon-fri`，周末/节假日数据源不返回新数据时保留最近交易日快照 |
-| **周末** | Cron 不触发 |
-| **节假日** | Cron 仍触发但数据源无新数据，快照不变 |
+| **Cron** | `*/30 * * * *`（全天每30分钟，含周末和节假日） |
+| **首次触发** | 北京时间首次 全天 |
+| **交易日/非交易日** | 周末/节假日数据源不返回新数据时，保留上次快照，面板正常显示历史数据 |
 
-> **设计决策（2026-07-24）**：移除了 `in_trading_window()` 和 `is_tx_today()` 双重守卫。Cron 自身的 `mon-fri` + 时间窗口已足够精确；节假日数据源不返回新行情，保留周五收盘快照可接受，不再需要 legu 页面日期比对。
+> **设计决策（2026-07-24）**：移除了交易日/交易窗口判断。Cron 全天触发，数据源无新数据时自动保留上次快照。面板显示始终可用，不受交易日限制。
 
 ### Cron 触发链路
 
-`scheduled()` 入口 → **HTTP 自调用 `/api/cron_run`**（fetch 上下文拥有完整 `env`，含 KV + Secret bindings）→ `_cron_run()` → `refresh_and_store()` → 写 KV + 推 GitHub Pages。
+```
+scheduled() → controller.env.KV + self.env 双路径 → _cron_run() → refresh_and_store()
+   → build_snapshot()  (10路并发) → 写 KV + 推 GitHub Pages
+```
 
-Python Workers beta 中 `scheduled()` 的 `self.env` 可能为 None，故 **HTTP 自调用是唯一可靠路径**。兜底：若自调用失败，退而尝试 `self.env`（仅在非 None 时有效）。
+Python Workers Beta 中 `ScheduledController.env` 是访问绑定的推荐方式。双路径确保最大可靠性。
 
 ---
 
@@ -113,9 +112,9 @@ Python Workers beta 中 `scheduled()` 的 `self.env` 可能为 None，故 **HTTP
 
 | 品种 | 来源 | symbol |
 |---|---|---|
-| WTI 原油 | 新浪 hf\_ | `hf_CL` |
-| COMEX 黄金 | 新浪 hf\_ | `hf_GC` |
-| 布伦特原油 | 新浪 hf\_ | `hf_OIL` |
+| WTI 原油 | 新浪 hf_ | `hf_CL` |
+| COMEX 黄金 | 新浪 hf_ | `hf_GC` |
+| 布伦特原油 | 新浪 hf_ | `hf_OIL` |
 
 ### 💱 汇率（1 只）
 
@@ -173,12 +172,10 @@ Python Workers beta 中 `scheduled()` 的 `self.env` 可能为 None，故 **HTTP
 
 ### 🇺🇸 美股恐慌指数
 
-在 A 股冰点卡下方展示，包含三个指标：
-
 | 指标 | 含义 | 数据源 | 解读区间 |
 |---|---|---|---|
 | **VIX** | 标普500 30天隐波 | Yahoo Finance | ≥40极度恐慌 / ≥30恐慌 / ≥25偏恐慌 / ≥20偏高 / ≥15正常 / ≥12偏低 / <12极低贪婪 |
-| **VXN** | 纳斯达克100 30天隐波 | Yahoo Finance | 同上（纳指波动率通常高于标普） |
+| **VXN** | 纳斯达克100 30天隐波 | Yahoo Finance | 同上 |
 | **CNN Fear & Greed** | 7因子恐惧贪婪指数（0–100） | CNN dataviz API | ≤25极度恐慌 / ≤45恐慌 / ≤55中性 / ≤75贪婪 / >75极度贪婪 |
 
 ### 估值水位
@@ -205,7 +202,7 @@ market-live/
 │   ├─ refresh_and_store() # Cron 核心：抓取+计算+写KV+推GitHub
 │   └─ class Default       # Worker 入口 (fetch + scheduled)
 ├── public/
-│   └── index.html         # Worker 版前端（VPN 可用，含手动刷新按钮）
+│   └── index.html         # Worker 版前端（已内嵌于 FALLBACK_HTML）
 ├── docs/                  # GitHub Pages 投递目录
 │   ├── index.html         # GitHub Pages 版前端（国内直连，只读快照）
 │   └── data.json          # 实时快照（Worker 每 30 分钟自动推送）
@@ -219,44 +216,38 @@ market-live/
 
 | 层 | 技术 |
 |---|---|
-| **计算引擎** | Cloudflare Python Worker（Pyodide 运行时，`python_workers` + `disable_python_external_sdk` 兼容标志） |
+| **计算引擎** | Cloudflare Python Worker（Pyodide 运行时，`python_workers` + `disable_python_external_sdk`） |
 | **数据存储** | Cloudflare Workers KV（快照缓存） |
-| **静态面板** | Cloudflare Workers Assets（原生 HTML/JS，无框架；VPN 直连版本） |
+| **静态面板** | 内嵌于 FALLBACK_HTML（完整 SPA，无框架依赖） |
 | **国内投递** | GitHub Pages（零服务器费，github.io 中国内直连） |
 | **数据推送** | Worker → GitHub Contents API（PUT `docs/data.json`） |
 | **凭证管理** | GitHub PAT 以 Cloudflare Secret（`GITHUB_TOKEN`）加密存储 |
-| **Cron 触发** | Cloudflare Triggers（`45 1 / 15,45 2-7 / 15 8 * * mon-fri`）+ HTTP 自调用 `/api/cron_run` |
+| **Cron 触发** | `*/30 * * * *`，通过 controller.env/self.env 双路径确保绑定可达 |
 | **部署方式** | Cloudflare REST API（multipart PUT）+ `workers-py` SDK |
 
 ---
 
 ## 部署指南
 
-> **注意**：当前部署通过 Cloudflare REST API 手动进行（`pywrangler` 在某些环境中不可用）。  
-> 如需完整 CLI 体验，请使用 `workers-py >= 1.90` + `wrangler`。
-
 ```bash
-# 1. 安装 workers-py
+# 安装 workers-py
 pip install workers-py>=1.90
 
-# 2. 设置 GitHub PAT（Cloudflare Secret）
-# 方式一：Cloudflare Dashboard → Workers → Settings → Variables → Add Secret
-# 方式二：REST API PUT 上传时在 metadata.bindings 中包含 {"name":"GITHUB_TOKEN","type":"secret_text"}
+# 设置 GitHub PAT（Cloudflare Secret）
+# 方式：Cloudflare Dashboard → Workers → market-live → Settings → Variables → GITHUB_TOKEN
 
-# 3. 设置 KV namespace（Cloudflare Dashboard 或 API）
+# 设置 KV Namespace（已存在 ID: cb2f5aca930241d985db5239e0373872）
 
-# 4. REST API 部署（本环境使用的实际方式）
-# 参考 DEPLOY_STATUS.md，核心是用 multipart PUT 到:
-# https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/workers/scripts/market-live
+# 部署（REST API）
+# PUT 到 /accounts/{ACCOUNT_ID}/workers/scripts/market-live
 # 包含 metadata (JSON) + worker.py 两部分
 
-# 5. GitHub Pages（仅首次）
-# 仓库 Settings → Pages → Source: Deploy from a branch → main → /docs → Save
+# 设置 Cron Schedules
+# PUT /accounts/{ACCOUNT_ID}/workers/scripts/market-live/schedules
+# Body: {"schedules": [{"cron": "*/30 * * * *"}]}
 ```
 
-### 必填兼容标志
-
-metadata 中必须包含：
+### 必填 metadata 字段
 
 ```json
 {
@@ -266,8 +257,6 @@ metadata 中必须包含：
 }
 ```
 
-其中 `disable_python_external_sdk` 是 Pyodide 运行时的必需标志（`workers-py < 1.90` 兼容）。
-
 ---
 
 ## 运维诊断（API）
@@ -276,8 +265,8 @@ metadata 中必须包含：
 |---|---|
 | `/api/data` | 返回当前快照（直接读取 KV，无需重新抓取） |
 | `/api/refresh` | 手动刷新：同步构建并写入 KV、推送 GitHub Pages |
-| `/api/cron_diag` | 定时触发诊断：返回最近一次 Cron 的状态（`enter` / `dispatched` / `error`），含 `stage`、`at`、`err`、`tb` 字段，用于排查 Cron 问题 |
-| `/api/cron_run` | 供 Cron 自调用的内部端点（完整交易日判断 + 刷新 + 诊断留痕） |
+| `/api/cron_diag` | 定时触发诊断：返回最近一次 Cron 的状态（`scheduled_called` / `dispatched` / 错误） |
+| `/api/cron_run` | 供 Cron 调用的内部端点（完整刷新 + 诊断留痕） |
 
 ---
 
@@ -297,7 +286,7 @@ metadata 中必须包含：
 | 来源 | 用途 | 协议 |
 |---|---|---|
 | **东方财富** push2delay | A/港/美/全球指数、汇率、资金流、ETF、K-line（成交额） | 公开 HTTP API |
-| **新浪财经** sina hf\_ | 全球大宗商品实时行情 | 公开 HTTP API |
+| **新浪财经** sina hf_ | 全球大宗商品实时行情 | 公开 HTTP API |
 | **新浪/腾讯** K-line | 上证指数日K（回撤/波动率/动量），腾讯兜底 | 公开 HTTP API |
 | **乐咕乐股** legulegu.com | 全市场涨跌/涨停/跌停家数（盘面广度） | 公开页面解析 |
 | **蛋卷基金** danjuanfunds.com | 指数估值 PE/PB/分位/股息率 | 公开 HTTP API |
