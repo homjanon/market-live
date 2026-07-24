@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>实时市场 · 恐惧指数 / 冰点</title>
+<style>
+  :root{
+    --up:#e0392b; --down:#1ba784; --bg:#f5f6f8; --card:#fff;
+    --ink:#1f2329; --sub:#8a9099; --line:#eceef1; --blue:#2563eb; --blue2:#3b82f6;
+    --fear:#0ea5e9; --greed:#f59e0b;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0 auto;max-width:780px;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:14px;line-height:1.5;padding:12px 12px 40px}
+  h1{font-size:17px;margin:4px 0 2px;font-weight:700}
+  .topbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+  .meta{color:var(--sub);font-size:12px}
+  .btn{background:var(--blue);color:#fff;border:0;border-radius:8px;padding:8px 14px;
+    font-size:13px;font-weight:600;cursor:pointer}
+  .btn:active{transform:scale(.97)}
+  .btn[disabled]{opacity:.5;cursor:default}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#bbb;margin-right:4px}
+  .dot.live{background:var(--down)}
+  .dot.sleep{background:#f0a020}
+  .card{background:var(--card);border-radius:14px;padding:14px;margin-bottom:12px;
+    box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .card h2{font-size:14px;margin:0 0 10px;font-weight:700;display:flex;align-items:center;gap:6px}
+  .gauge{display:flex;align-items:center;gap:16px}
+  .xxfi-num{font-size:46px;font-weight:800;line-height:1;min-width:96px;text-align:center}
+  .xxfi-side{flex:1}
+  .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;color:#fff}
+  .b-buy{background:var(--down)} .b-acc{background:#3aa0ff} .b-hold{background:#8a9099}
+  .b-red{background:#f0a020} .b-sell{background:var(--up)}
+  .sig{font-size:13px;color:var(--sub);margin-top:6px}
+  .advice{font-size:12px;color:var(--sub);margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
+  .bars{margin-top:10px}
+  .bar-row{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px}
+  .bar-row .lab{width:64px;color:var(--sub);flex:none}
+  .bar-track{flex:1;height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+  .bar-fill{height:100%;border-radius:4px;display:block}
+  .bar-fill.fear{background:var(--fear)}
+  .bar-fill.greed{background:var(--greed)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:right;padding:7px 6px;border-bottom:1px solid var(--line)}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--sub);font-weight:600;font-size:12px}
+  .up{color:var(--up);font-weight:600} .down{color:var(--down);font-weight:600} .flat{color:var(--sub)}
+  .tag{font-size:11px;color:var(--sub);background:var(--bg);padding:1px 6px;border-radius:6px;margin-left:4px}
+  .ice-verdict{font-size:22px;font-weight:800;text-align:center;padding:6px 0 2px}
+  .dim{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .dim:last-child{border-bottom:0}
+  .dim .nm{font-weight:600}
+  .dim .th{color:var(--sub);font-size:11px}
+  .pass{font-weight:700} .pass.ok{color:var(--down)} .pass.no{color:var(--up)} .pass.na{color:var(--sub)}
+  .degraded{font-size:12px;color:#b06a00;background:#fff7e6;border-radius:8px;padding:8px 10px;margin-bottom:12px}
+  .sec-title{font-size:12px;color:var(--sub);margin:14px 2px 6px;font-weight:600}
+  .err{color:var(--up);font-size:13px;padding:20px;text-align:center}
+  .foot{color:var(--sub);font-size:11px;text-align:center;margin-top:14px}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h1>实时市场 · 恐惧 / 冰点</h1>
+      <div class="meta"><span id="statusDot" class="dot"></span><span id="statusTxt">初始化…</span> · 更新：<span id="upd">—</span></div>
+    </div>
+    <button class="btn" id="refreshBtn" onclick="manualRefresh()">立即刷新</button>
+  </div>
+
+  <div id="degraded" class="degraded" style="display:none"></div>
+  <div id="content"></div>
+  <div class="foot">数据源自东财 / 新浪 / 蛋卷 · 自算小旭恐惧指数(XXFI)与A股冰点 · GitHub Pages 国内直连版 · 仅供研究，非投资建议</div>
+
+<script>
+const POLL_MS = 30 * 60 * 1000;
+const IS_GH = location.hostname.includes('github.io');
+if(IS_GH){ const _b=document.getElementById('refreshBtn'); if(_b) _b.style.display='none'; }   // 30 分钟自动轮询
+let timer = null;
+
+function colorCls(v){
+  if(v === null || v === undefined || isNaN(v)) return 'flat';
+  if(v > 0) return 'up';
+  if(v < 0) return 'down';
+  return 'flat';
+}
+function fmtPct(v){
+  if(v === null || v === undefined || isNaN(v)) return '—';
+  return (v>0?'+':'') + v.toFixed(2) + '%';
+}
+function fmtNum(v, d=2){
+  if(v === null || v === undefined || isNaN(v)) return '—';
+  return Number(v).toLocaleString('zh-CN', {minimumFractionDigits:d, maximumFractionDigits:d});
+}
+
+// 京时间交易时段判断（与 Worker 一致：周一~周五 9:30–16:00）
+function inWindow(){
+  const bj = new Date(Date.now() + 8*3600*1000);
+  const wd = bj.getUTCDay(); // 0=日
+  if(wd === 0 || wd === 6) return false;
+  const hm = bj.getUTCHours()*60 + bj.getUTCMinutes();
+  return hm >= 9*60+30 && hm <= 16*60+15;
+}
+
+async function load(){
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true; btn.textContent = '加载中…';
+  try{
+    const _url = (IS_GH ? './data.json' : '/api/data') + '?_=' + Date.now();
+    const r = await fetch(_url, {cache:'no-store'});
+    const txt = await r.text();
+    const data = JSON.parse(txt);
+    if(data.error){ throw new Error(data.error); }
+    render(data);
+    setStatus(true);
+  }catch(e){
+    document.getElementById('content').innerHTML =
+      '<div class="err">加载失败：' + e.message + '<br>请稍后重试（Cron 每30分钟自动刷新）。</div>';
+    setStatus(false, e.message);
+  }finally{
+    btn.disabled = false; btn.textContent = '立即刷新';
+  }
+}
+
+function setStatus(ok, msg){
+  const dot = document.getElementById('statusDot'), txt = document.getElementById('statusTxt');
+  if(ok){
+    if(inWindow()){ dot.className='dot live'; txt.textContent='交易中 · 每30分钟自动刷新'; }
+    else { dot.className='dot sleep'; txt.textContent='非交易时段 · 数据冻结'; }
+  }else{
+    dot.className='dot'; txt.textContent='异常：' + (msg||'未知');
+  }
+}
+
+async function manualRefresh(){
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true; btn.textContent = '刷新中…';
+  try{
+    if(IS_GH){ alert('GitHub Pages 版为只读快照，刷新由 Cron 每30分钟自动完成。'); return; }
+    const r = await fetch('/api/refresh', {method:'POST', cache:'no-store'});
+    const data = await r.json();
+    render(data);
+    setStatus(true);
+  }catch(e){
+    alert('刷新失败：' + e.message);
+  }finally{
+    btn.disabled = false; btn.textContent = '立即刷新';
+  }
+}
+
+function render(d){
+  document.getElementById('upd').textContent = d.generated_at || '—';
+  // 降级提示
+  const dg = document.getElementById('degraded');
+  if(d.degraded && d.degraded.length){
+    dg.style.display='block';
+    dg.textContent = '⚠ 部分数据源降级：' + d.degraded.join('、') + '（相关指标按中性/缺失处理）';
+  } else { dg.style.display='none'; }
+
+  let h = '';
+  h += renderXXFI(d.xxfi);
+  h += renderBingdian(d.bingdian, d.breadth_source);
+  h += renderUSFear(d.us_fear);
+  h += renderMarketTables(d);
+  document.getElementById('content').innerHTML = h;
+}
+
+function renderXXFI(x){
+  if(!x) return '';
+  const sigMap = {BUY:['b-buy','反向强烈看多'], ACCUMULATE:['b-acc','逢低吸纳'],
+    HOLD:['b-hold','持有'], REDUCE:['b-red','逢高减仓'], SELL:['b-sell','反向看空']};
+  const [bc, bl] = sigMap[x.contrarian_signal] || ['b-hold','—'];
+  const c = x.components || {};
+  const f = c.fear||{}, g = c.greed||{};
+  const bar = (lab,v,color='')=>`<div class="bar-row"><span class="lab">${lab}</span>
+    <span class="bar-track"><span class="bar-fill" style="width:${Math.max(0,Math.min(100,v))}%${color?';background:'+color:''}"></span></span>
+    <span style="width:34px;text-align:right">${v}</span></div>`;
+  return `<div class="card">
+    <h2>😨 小旭恐惧指数 XXFI <span class="tag">0–100 · 越高越恐惧</span></h2>
+    <div class="gauge">
+      <div class="xxfi-num" style="color:${x.XXFI>=60?'var(--up)':x.XXFI>=40?'var(--sub)':'var(--down)'}">${x.XXFI}</div>
+      <div class="xxfi-side">
+        <span class="badge ${bc}">${x.contrarian_signal} · ${bl}</span>
+        <div class="sig">贪婪指数 ${x.GreedIndex} ｜ 等级：${x.level}</div>
+        <div class="sig">背离：${x.divergence_state||'—'}${x.divergence!=null?('（'+x.divergence+'）'):''}</div>
+      </div>
+    </div>
+    <div class="bars">
+      ${bar('回撤', f.drawdown, '#0ea5e9')} ${bar('广度', f.breadth, '#0ea5e9')}
+      ${bar('跌停比', f.limitdown, '#0ea5e9')} ${bar('波动率', f.vol, '#0ea5e9')}
+    </div>
+    <div class="advice">${x.advice||''}</div>
+  </div>`;
+}
+
+function renderBingdian(b, src){
+  if(!b) return '';
+  const color = b.verdict ? 'var(--up)' : 'var(--sub)';
+  const srcTxt = src === 'legu' ? 'legu（乐咕·全市场）'
+               : src === 'em_fallback' ? '东财分页（边缘覆盖不全·降级）'
+               : (src || '—');
+  const dims = (b.dimensions||[]).map(dm=>{
+    let pc='na', pt='—';
+    if(dm.pass === true){ pc='ok'; pt='✔ 满足'; }
+    else if(dm.pass === false){ pc='no'; pt='✘ 不满足'; }
+    return `<div class="dim">
+      <div><div class="nm">${dm.key} · ${dm.name}</div>
+        <div class="th">阈值：${dm.threshold}</div>
+        <div style="font-size:12px;margin-top:2px">${dm.value}</div></div>
+      <div class="pass ${pc}">${pt}</div>
+    </div>`;
+  }).join('');
+  return `<div class="card">
+    <h2>🧊 A股冰点判定 <span class="tag">四维度全满足=冰点</span></h2>
+    <div class="ice-verdict" style="color:${color}">${b.verdict_emoji} ${b.verdict_text}</div>
+    <div style="text-align:center;color:var(--sub);font-size:12px;margin-bottom:6px">${b.verdict_full||''}</div>
+    <div style="text-align:center;color:var(--sub);font-size:11px;margin-bottom:8px">广度来源：${srcTxt}</div>
+    ${dims}
+  </div>`;
+}
+
+function renderUSFear(u){
+  if(!u) return '';
+  const vi = u.vix, vn = u.vxn, fg = u.fear_greed;
+  const hasData = vi || vn || fg;
+  if(!hasData) return '';
+  function vixLabel(v){ if(v===null||v===undefined) return '—';
+    if(v>40) return '🛑 极度恐慌'; if(v>30) return '⚠ 恐慌'; if(v>25) return '偏恐慌';
+    if(v>20) return '偏高'; if(v>15) return '正常';
+    if(v>12) return '偏低'; return '🟢 极低（贪婪）'; }
+  function fngLabel(s){ if(s===null||s===undefined) return '—';
+    if(s<=25) return '🛑 极度恐慌'; if(s<=45) return '⚠ 恐慌';
+    if(s<=55) return '中性'; if(s<=75) return '🟡 贪婪';
+    return '🟢 极度贪婪'; }
+  function vixColor(v){ if(v===null||v===undefined) return 'flat';
+    return v>30?'up':v<15?'down':'flat'; }
+  function fmtPct(v){ if(v===null||v===undefined) return '—';
+    return (v>0?'+':'')+v.toFixed(2)+'%'; }
+  return `<div class="card">
+    <h2>🇺🇸 美股恐慌指数</h2>
+    <table>
+      <tr><th>指标</th><th>数值</th><th>解读</th></tr>
+      ${vi?`<tr><td>VIX（标普波动率）</td><td>${fmtNum(vi.price,1)}</td><td class="${vixColor(vi.price)}">${vixLabel(vi.price)}</td></tr>`:''}
+      ${vn?`<tr><td>VXN（纳指波动率）</td><td>${fmtNum(vn.price,1)}</td><td class="${vixColor(vn.price)}">${vixLabel(vn.price)}</td></tr>`:''}
+      ${fg?`<tr><td>CNN Fear & Greed</td><td>${Math.round(fg.score)}</td><td class="${fg.score<=25?'up':fg.score>=75?'down':'flat'}">${fngLabel(fg.score)}</td></tr>`:''}
+    </table>
+    ${!vi&&!vn&&!fg?'<div style="text-align:center;color:var(--sub);font-size:12px">暂未获取</div>':''}
+    <div style="font-size:11px;color:var(--sub);margin-top:6px;text-align:center">来源：Yahoo Finance / CNN &nbsp;·&nbsp; VIX≥30恐慌 / 15-20正常 / &lt;12极度贪婪</div>
+  </div>`;
+}
+
+function renderMarketTables(d){
+  const idx = d.indices || {};
+  const grp = {
+    'A股': ['上证指数','深证成指','创业板指','沪深300','科创50','北证50'],
+    '港股': ['恒生指数','恒生科技'],
+    '美股': ['纳斯达克100','标普500','道琼斯'],
+    '全球': ['日经225','韩国KOSPI','德国DAX','欧洲斯托克600','法国CAC40','英国富时100'],
+  };
+  let h = '';
+  for(const [title, names] of Object.entries(grp)){
+    const rows = names.filter(n=>idx[n]).map(n=>{
+      const o = idx[n];
+      return `<tr><td>${o.name}</td><td>${fmtNum(o.price)}</td>
+        <td class="${colorCls(o.chg)}">${fmtPct(o.chg)}</td></tr>`;
+    }).join('');
+    h += `<div class="sec-title">${title}</div>
+      <div class="card" style="padding:6px 14px"><table>
+      <tr><th>指数</th><th>最新价</th><th>涨跌幅</th></tr>${rows}</table></div>`;
+  }
+  // 商品 + 人民币
+  const cm = d.commodities || {};
+  const fx = idx['美元离岸人民币'];
+  const crow = Object.keys(cm).map(n=>`<tr><td>${cm[n].name}</td><td>${fmtNum(cm[n].price)}</td>
+    <td class="${colorCls(cm[n].chg)}">${fmtPct(cm[n].chg)}</td></tr>`).join('');
+  const fxrow = fx ? `<tr><td>美元离岸人民币</td><td>${fmtNum(fx.price)}</td>
+    <td class="${colorCls(fx.chg)}">${fmtPct(fx.chg)}</td></tr>` : '';
+  h += `<div class="sec-title">大宗商品 / 汇率</div>
+    <div class="card" style="padding:6px 14px"><table>
+    <tr><th>品种</th><th>最新价</th><th>涨跌幅</th></tr>${crow}${fxrow}</table></div>`;
+  // 估值
+  const va = d.valuation || {};
+  const vrow = Object.keys(va).map(n=>{
+    const o = va[n];
+    const pct = o.pe_pct!=null ? (o.pe_pct*100).toFixed(0)+'%' : '—';
+    const yld = o.yield!=null ? (o.yield*100).toFixed(2)+'%' : '—';
+    return `<tr><td>${o.name}</td><td>${fmtNum(o.pe)}</td><td>${pct}</td>
+      <td>${fmtNum(o.pb)}</td><td>${yld}</td></tr>`;
+  }).join('');
+  h += `<div class="sec-title">估值水位（蛋卷 · ${va['沪深300']?va['沪深300'].date:'—'}）</div>
+    <div class="card" style="padding:6px 14px"><table>
+    <tr><th>指数</th><th>PE(TTM)</th><th>PE分位</th><th>PB</th><th>股息率</th></tr>${vrow}</table></div>`;
+  return h;
+}
+
+load();
+// 仅在交易时段内启动 30 分钟轮询；非交易时段靠手动刷新
+if(inWindow()){
+  timer = setInterval(load, POLL_MS);
+}
+// 切回前台时若已过很久也刷新一次
+document.addEventListener('visibilitychange', ()=>{
+  if(!document.hidden && inWindow()) load();
+});
+</script>
+</body>
+</html>
