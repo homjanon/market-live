@@ -60,9 +60,9 @@
 | **周末** | ❌ 跳过 |
 | **节假日** | ❌ 跳过（春节/国庆/清明等） |
 
-双重守卫：
-- `in_trading_window()` — 北京时 9:30–16:15、周一~周五
-- `is_tx_today()` — 检查 legu 页面统计日期是否等于当日
+刷新守卫（已简化）：
+- 仅以 `is_tx_today()` 判定是否为交易日（legu 页面统计日期校验，含调休/节假日自动跳过）；
+- 窗口判断 `in_trading_window()` 已移除，不再作为独立守卫。
 
 ---
 
@@ -255,9 +255,11 @@ CLOUDFLARE_API_TOKEN="..." CLOUDFLARE_ACCOUNT_ID="..." uv run pywrangler deploy
 |---|---|
 | `/api/data` | 返回当前快照（直接读取 KV，无需重新抓取） |
 | `/api/refresh` | 手动刷新：同步构建并写入 KV、推送 GitHub Pages（等价于 Cron 跑的逻辑） |
-| `/api/cron_diag` | 定时触发诊断：返回最近一次 Cron 的状态（`enter` / `dispatched` / `error`），含 `in_window`、`is_tx`、`err`、`tb` 字段，用于排查“自动触发没跑”问题 |
+| `/api/cron_diag` | 定时触发诊断：返回最近一次 Cron 的状态（`enter` / `dispatched` / `error`），含 `is_tx`、`err`、`tb` 字段（GitHub 推送状态见 `_gh_diag`），用于排查“自动触发没跑”问题 |
 
-**Cron 健壮性**：`scheduled()` 采用 `controller.waitUntil` 优先、回退 `self.ctx.waitUntil`、最终兜底直接 `await` 的三重写法，且全程 `try/except` 把异常写入 KV（`_cron_diag`），**不再静默失败**。
+**Cron 健壮性**：`scheduled(self, controller, env, ctx)` 按 Cloudflare 运行时签名接收 4 个位置参数；绑定一律通过 `self.env` 获取——位置参数里的 `env` 在 Python Workers 的 scheduled 上下文并非真实绑定对象，曾导致 KV / GitHub 写操作静默失败。全程 `try/except` 把状态写入 KV：`_cron_diag`（定时触发 `enter`/`skipped`/`dispatched`/`error`）与 `_gh_diag`（GitHub 推送 `no_token`/`error`/`ok`），**不再静默失败**。
+> **2026-07-24 修复记录**：① `scheduled` 改由 `self.env` 取绑定（原位置参数 `env` 静默失效）；② 补全 `GITHUB_TOKEN` secret，GitHub Pages 自动推送恢复；③ 新增 `_cron_diag` / `_gh_diag` 诊断留痕。
+
 
 ---
 
