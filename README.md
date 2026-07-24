@@ -22,7 +22,7 @@
 │       │             │               │            │
 │       ▼             ▼               ▼            │
 │  ┌─────────────────────────────────────────┐     │
-│  │  9 路并发抓取 → build_snapshot()        │     │
+│  │  10 路并发抓取 → build_snapshot()        │     │
 │  │  · 指数/汇率/商品 · 广度/资金流/估值    │     │
 │  │  · 自算 XXFI + 冰点                    │     │
 │  └────────────────┬────────────────────────┘     │
@@ -44,7 +44,7 @@
 └─────────────────┘  └──────────────────────────┘
 ```
 
-**核心逻辑**：Worker 每30分钟采集9路数据源 → 计算 XXFI + 冰点 → 同时写入 KV（供 VPN 版读取）和推送到 GitHub Pages（供国内直连）。
+**核心逻辑**：Worker 每30分钟采集10路数据源 → 计算 XXFI + 冰点 → 同时写入 KV（供 VPN 版读取）和推送到 GitHub Pages（供国内直连）。
 
 ---
 
@@ -52,7 +52,7 @@
 
 | 规则 | 值 |
 |---|---|
-| **Cron**（UTC） | `45,15 1-8 * * 1-5` |
+| **Cron**（UTC） | `45 1` / `15,45 2-7` / `15 8` `* * mon-fri`（3 段，共 14 次/交易日） |
 | **Cron**（北京） | `9:45, 10:15, 10:45, …, 16:15`（每 30 分钟） |
 | **首次触发** | 北京 **9:45** |
 | **末次触发** | 北京 **16:15** |
@@ -62,7 +62,7 @@
 
 双重守卫：
 - `in_trading_window()` — 北京时 9:30–16:15、周一~周五
-- `is_legu_today()` — 检查 legu 页面统计日期是否等于当日
+- `is_tx_today()` — 检查 legu 页面统计日期是否等于当日
 
 ---
 
@@ -202,7 +202,7 @@ market-live/
 ├── wrangler.toml          # Cloudflare 部署配置
 │   ├─ KV 绑定             # 快照存储
 │   ├─ ASSETS 绑定         # 静态面板
-│   └─ Cron 触发           # 45,15 1-8 * * 1-5
+│   └─ Cron 触发           # 45 1 / 15,45 2-7 / 15 8 * * mon-fri
 ├── public/
 │   └── index.html         # Worker 版前端（VPN 可用，含手动刷新按钮）
 ├── docs/                  # GitHub Pages 投递目录
@@ -246,6 +246,18 @@ CLOUDFLARE_API_TOKEN="..." CLOUDFLARE_ACCOUNT_ID="..." uv run pywrangler deploy
 # 4. GitHub Pages 设置（仅首次）
 # 仓库 Settings → Pages → Source: Deploy from branch → main → /docs → Save
 ```
+
+---
+
+## 运维诊断（API）
+
+| 端点 | 作用 |
+|---|---|
+| `/api/data` | 返回当前快照（直接读取 KV，无需重新抓取） |
+| `/api/refresh` | 手动刷新：同步构建并写入 KV、推送 GitHub Pages（等价于 Cron 跑的逻辑） |
+| `/api/cron_diag` | 定时触发诊断：返回最近一次 Cron 的状态（`enter` / `dispatched` / `error`），含 `in_window`、`is_tx`、`err`、`tb` 字段，用于排查“自动触发没跑”问题 |
+
+**Cron 健壮性**：`scheduled()` 采用 `controller.waitUntil` 优先、回退 `self.ctx.waitUntil`、最终兜底直接 `await` 的三重写法，且全程 `try/except` 把异常写入 KV（`_cron_diag`），**不再静默失败**。
 
 ---
 
