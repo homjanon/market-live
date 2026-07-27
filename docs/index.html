@@ -162,7 +162,6 @@ function render(d){
   h += renderXXFI(d.xxfi);
   h += renderBingdian(d.bingdian, d.breadth_source);
   h += renderUSFear(d.us_fear);
-  h += renderUSQuotes(d.us_quotes);
   h += renderMarketTables(d);
   document.getElementById('content').innerHTML = h;
 }
@@ -266,7 +265,7 @@ function renderUSQuotes(list){
       <td>${fmtNum(o.price)}</td><td class="${colorCls(o.chg)}">${fmtPct(o.chg)}</td></tr>`;
   }).join('');
   return `<div class="card">
-    <h2>🇺🇸 美股行情 <span class="tag">指数/ETF=Yahoo · 期货=新浪</span></h2>
+    <h2>美股 <span class="tag">指数/ETF=Yahoo · 期货=新浪</span></h2>
     <table><tr><th>名称</th><th>最新价</th><th>涨跌幅</th></tr>${rows}</table>
     <div style="font-size:11px;color:var(--sub);margin-top:6px">Yahoo 取不到时该行留空（无兜底源）</div>
   </div>`;
@@ -279,6 +278,7 @@ function renderMarketTables(d){
     '港股': ['恒生指数','恒生科技'],
     '全球': ['日经225','韩国KOSPI','德国DAX','欧洲斯托克600','法国CAC40','英国富时100'],
   };
+  const usq = d.us_quotes || [];
   let h = '';
   for(const [title, names] of Object.entries(grp)){
     const rows = names.filter(n=>idx[n]).map(n=>{
@@ -289,6 +289,7 @@ function renderMarketTables(d){
     h += `<div class="sec-title">${title}</div>
       <div class="card" style="padding:6px 14px"><table>
       <tr><th>指数</th><th>最新价</th><th>涨跌幅</th></tr>${rows}</table></div>`;
+    if(title === '港股'){ h += renderUSQuotes(usq); }   // 美股卡片：港股下方、全球上方
   }
   // 商品 + 人民币
   const cm = d.commodities || {};
