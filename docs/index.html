@@ -162,6 +162,7 @@ function render(d){
   h += renderXXFI(d.xxfi);
   h += renderBingdian(d.bingdian, d.breadth_source);
   h += renderUSFear(d.us_fear);
+  h += renderUSQuotes(d.us_quotes);
   h += renderMarketTables(d);
   document.getElementById('content').innerHTML = h;
 }
@@ -250,12 +251,32 @@ function renderUSFear(u){
   </div>`;
 }
 
+function renderUSQuotes(list){
+  // 固定顺序（与 Worker 一致），即使某条数据缺失也能显示名称+降级占位
+  const ORDER = ["标普500","纳斯达克100","纳斯达克综合","道琼斯","美国红利指数ETF(SCHD)","半导体ETF","标普500期货","纳指100期货"];
+  if(!list || !list.length) return '';
+  const byName = {};
+  list.forEach(o=>{ if(o && o.name) byName[o.name] = o; });
+  const rows = ORDER.map(nm=>{
+    const o = byName[nm];
+    if(!o){
+      return `<tr><td>${nm}</td><td class="flat">—</td><td class="flat">—</td></tr>`;
+    }
+    return `<tr><td>${o.name}${o.source==='sina hf_'?'<span class="tag">期货</span>':''}</td>
+      <td>${fmtNum(o.price)}</td><td class="${colorCls(o.chg)}">${fmtPct(o.chg)}</td></tr>`;
+  }).join('');
+  return `<div class="card">
+    <h2>🇺🇸 美股行情 <span class="tag">指数/ETF=Yahoo · 期货=新浪</span></h2>
+    <table><tr><th>名称</th><th>最新价</th><th>涨跌幅</th></tr>${rows}</table>
+    <div style="font-size:11px;color:var(--sub);margin-top:6px">Yahoo 取不到时该行留空（无兜底源）</div>
+  </div>`;
+}
+
 function renderMarketTables(d){
   const idx = d.indices || {};
   const grp = {
-    'A股': ['上证指数','深证成指','创业板指','沪深300','科创50','北证50'],
+    'A股': ['上证指数','深证成指','创业板指','沪深300','科创50','北证50','30年国债ETF博时'],
     '港股': ['恒生指数','恒生科技'],
-    '美股': ['纳斯达克100','标普500','道琼斯'],
     '全球': ['日经225','韩国KOSPI','德国DAX','欧洲斯托克600','法国CAC40','英国富时100'],
   };
   let h = '';
