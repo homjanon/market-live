@@ -261,11 +261,11 @@ function renderUSQuotes(list){
     if(!o){
       return `<tr><td>${nm}</td><td class="flat">—</td><td class="flat">—</td></tr>`;
     }
-    return `<tr><td>${o.name}${o.source==='sina hf_'?'<span class="tag">期货</span>':''}</td>
+    return `<tr><td>${o.name}${o.name.includes('期货')?'<span class="tag">期货</span>':''}</td>
       <td>${fmtNum(o.price)}</td><td class="${colorCls(o.chg)}">${fmtPct(o.chg)}</td></tr>`;
   }).join('');
   return `<div class="card">
-    <h2>美股 <span class="tag">指数/ETF=Yahoo · 期货=新浪</span></h2>
+    <h2>美股 <span class="tag">指数/ETF/期货=Yahoo</span></h2>
     <table><tr><th>名称</th><th>最新价</th><th>涨跌幅</th></tr>${rows}</table>
     <div style="font-size:11px;color:var(--sub);margin-top:6px">Yahoo 取不到时该行留空（无兜底源）</div>
   </div>`;
