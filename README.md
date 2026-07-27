@@ -22,7 +22,7 @@
 │       │             │               │            │
 │       ▼             ▼               ▼            │
 │  ┌─────────────────────────────────────────┐     │
-│  │  10 路并发抓取 → build_snapshot()        │     │
+│  │  12 路并发抓取 → build_snapshot()        │     │
 │  │  · 指数/汇率/商品 · 广度/资金流/估值    │     │
 │  │  · 自算 XXFI + 冰点                    │     │
 │  └────────────────┬────────────────────────┘     │
@@ -44,7 +44,7 @@
 └─────────────────┘  └──────────────────────────┘
 ```
 
-**核心逻辑**：Worker 每30分钟采集10路数据源 → 计算 XXFI + 冰点 → 同时写入 KV（供 VPN 版读取）和推送到 GitHub Pages（供国内直连）。
+**核心逻辑**：Worker 每30分钟采集 12 路数据源 → 计算 XXFI + 冰点 → 同时写入 KV（供 VPN 版读取）和推送到 GitHub Pages（供国内直连）。
 
 ---
 
@@ -68,31 +68,39 @@
 
 ## 数据板块
 
-### 📈 A 股（6 只）
+### 📈 A 股（8 只）
 
-| 指数 | 来源 | secid |
+| 指数 | 来源 | secid / symbol |
 |---|---|---|
 | 上证指数 | 东方财富 push2delay | `1.000001` |
 | 深证成指 | 东方财富 push2delay | `0.399001` |
 | 创业板指 | 东方财富 push2delay | `0.399006` |
 | 沪深300 | 东方财富 push2delay | `1.000300` |
 | 科创50 | 东方财富 push2delay | `1.000688` |
-| **北证50** | 东方财富 push2delay | `0.899050` |
+| 北证50 | 东方财富 push2delay | `0.899050` |
+| 红利低波 | 东方财富 push2delay | `2.H30269` |
+| 30年国债期货 | 新浪 nf\_ | `nf_TL0` |
 
-### 📊 港股（2 只）
+### 📊 港股（3 只）
 
 | 指数 | 来源 | secid |
 |---|---|---|
 | 恒生指数 | 东方财富 push2delay | `100.HSI` |
 | 恒生科技 | 东方财富 push2delay | `124.HSTECH` |
+| 恒生国企指数 | 东方财富 push2delay | `100.HSCEI` |
 
-### 🇺🇸 美股（3 只）
+### 🇺🇸 美股（8 只 · 独立卡片，港股下方/全球上方）
 
-| 指数 | 来源 | secid |
+| 品种 | 来源 | symbol |
 |---|---|---|
-| 纳斯达克100 | 东方财富 push2delay | `100.NDX` |
-| 标普500 | 东方财富 push2delay | `100.SPX` |
-| 道琼斯 | 东方财富 push2delay | `100.DJIA` |
+| 标普500 | Yahoo Finance | `^GSPC` |
+| 纳斯达克100 | Yahoo Finance | `^NDX` |
+| 纳斯达克综合 | Yahoo Finance | `^IXIC` |
+| 道琼斯 | Yahoo Finance | `^DJI` |
+| 美国红利指数ETF (SCHD) | Yahoo Finance | `SCHD` |
+| 半导体ETF (SOXX) | Yahoo Finance | `SOXX` |
+| 标普500期货 | 新浪 hf\_ | `hf_ES` |
+| 纳指100期货 | 新浪 hf\_ | `hf_NQ` |
 
 ### 🌍 全球（6 只）
 
@@ -101,17 +109,18 @@
 | 日经225 | 东方财富 push2delay | `100.N225` |
 | 韩国KOSPI | 东方财富 push2delay | `100.KS11` |
 | 德国DAX | 东方财富 push2delay | `100.GDAXI` |
-| **欧洲斯托克600** | 东方财富 push2delay | `100.SXXP` |
-| **法国CAC40** | 东方财富 push2delay | `100.FCHI` |
-| **英国富时100** | 东方财富 push2delay | `100.FTSE` |
+| 欧洲斯托克600 | 东方财富 push2delay | `100.SXXP` |
+| 法国CAC40 | 东方财富 push2delay | `100.FCHI` |
+| 英国富时100 | 东方财富 push2delay | `100.FTSE` |
 
-### 🛢️ 大宗商品（3 只）
+### 🛢️ 大宗商品（4 只）
 
 | 品种 | 来源 | symbol |
 |---|---|---|
 | WTI 原油 | 新浪 hf\_ | `hf_CL` |
 | COMEX 黄金 | 新浪 hf\_ | `hf_GC` |
 | 布伦特原油 | 新浪 hf\_ | `hf_OIL` |
+| 白银 | 新浪 hf\_ | `hf_SI` |
 
 ### 💱 汇率（1 只）
 
@@ -119,7 +128,6 @@
 |---|---|---|
 | 美元离岸人民币 | 东方财富 push2delay | `133.USDCNH` |
 
----
 
 ## 计算指标
 
@@ -181,11 +189,18 @@
 
 | 指数 | 来源 |
 |---|---|
-| 标普500 | 蛋卷基金 index_eva |
-| 创业板指 | 蛋卷基金 index_eva |
-| 中证红利低波 | 蛋卷基金 index_eva |
-| 恒生科技 | 蛋卷基金 index_eva |
+| 上证50 | 蛋卷基金 index_eva |
 | 沪深300 | 蛋卷基金 index_eva |
+| 创业板指 | 蛋卷基金 index_eva |
+| 科创50 | 蛋卷基金 index_eva |
+| 中概互联50 | 蛋卷基金 index_eva |
+| 恒生科技 | 蛋卷基金 index_eva |
+| 中证白酒 | 蛋卷基金 index_eva |
+| 中证银行 | 蛋卷基金 index_eva |
+| 中证红利 | 蛋卷基金 index_eva |
+| 中证红利低波 | 蛋卷基金 index_eva |
+| 标普500 | 蛋卷基金 index_eva |
+| 纳指100 | 蛋卷基金 index_eva |
 
 ---
 
@@ -194,7 +209,7 @@
 ```
 market-live/
 ├── worker.py              # Cloudflare Python Worker 主逻辑
-│   ├─ 采集 9 路数据源     # (HTTP 并发, asyncio.gather)
+│   ├─ 采集 12 路数据源     # (HTTP 并发, asyncio.gather)
 │   ├─ compute_xxfi()      # 小旭恐惧指数计算
 │   ├─ compute_bingdian()  # A 股冰点判定
 │   ├─ publish_to_github() # 推 data.json 到 GitHub
