@@ -99,8 +99,8 @@
 | 道琼斯 | Yahoo Finance | `^DJI` |
 | 美国红利指数ETF (SCHD) | Yahoo Finance | `SCHD` |
 | 半导体ETF (SOXX) | Yahoo Finance | `SOXX` |
-| 标普500期货 | 新浪 hf\_ | `hf_ES` |
-| 纳指100期货 | 新浪 hf\_ | `hf_NQ` |
+| 标普500期货 | Yahoo Finance | `ES=F` |
+| 纳指100期货 | Yahoo Finance | `NQ=F` |
 
 ### 🌍 全球（6 只）
 
