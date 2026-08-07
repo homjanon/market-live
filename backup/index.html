@@ -75,7 +75,7 @@
 
 <script>
 const POLL_MS = 30 * 60 * 1000;
-const IS_GH = location.hostname.includes('github.io'); // 双路径后不再决定数据源
+const IS_GH = true; // docs/ = GitHub Pages 只读快照版，始终隐藏刷新按钮
 if(IS_GH){ const _b=document.getElementById('refreshBtn'); if(_b) _b.style.display='none'; }   // 30 分钟自动轮询
 let timer = null;
 
