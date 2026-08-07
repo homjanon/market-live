@@ -1,6 +1,6 @@
 # market-live · 实时市场看板
 
-> **国内直连**：https://market-live.hellohopo.dpdns.org（GitHub Pages 自定义域名，中国内地直连）  
+> **国内直连**：https://homjanon.github.io/market-live/（GitHub Pages，中国内地直连）  
 > **VPN**：https://market-live.homjanon.workers.dev（Cloudflare Worker，含手动刷新按钮）
 
 实时展示 A 股、港股、美股、全球主要指数、大宗商品、汇率、估值水位，并自算**小旭恐惧指数（XXFI）** 与 **A 股冰点**参考指标。
@@ -38,11 +38,10 @@
           ▼                 ▼
 ┌─────────────────┐  ┌──────────────────────────┐
 │ workers.dev     │  │ GitHub Pages              │
-│ (需VPN)         │  │ market-live.hellohopo     │
-│ 读 /api/data    │  │ .dpdns.org (国内直连)     │
-│ 含手动刷新按钮   │  │ 读 ./data.json (只读)     │
-└─────────────────┘  │ 无手动刷新                │
-                    └──────────────────────────┘
+│ (需VPN)         │  │ github.io (国内直连)      │
+│ 读 /api/data    │  │ 读 ./data.json (只读)     │
+│ 含手动刷新按钮   │  │ 无手动刷新                │
+└─────────────────┘  └──────────────────────────┘
 ```
 
 **核心逻辑**：Worker 每30分钟采集10路数据源 → 计算 XXFI + 冰点 → 同时写入 KV（供 VPN 版读取）和推送到 GitHub Pages（供国内直连）。
@@ -224,7 +223,7 @@ market-live/
 | **计算引擎** | Cloudflare Python Worker（Pyodide 运行时，`python_workers` 兼容标志） |
 | **数据存储** | Cloudflare Workers KV（快照缓存） |
 | **静态面板** | Cloudflare Workers Assets（原生 HTML/JS，无框架） |
-| **国内投递** | GitHub Pages（零服务器费，`market-live.hellohopo.dpdns.org` 中国内地直连） |
+| **国内投递** | GitHub Pages（零服务器费，github.io 中国内直连） |
 | **数据推送** | Worker → GitHub Contents API → `docs/data.json` |
 | **凭证管理** | GitHub PAT 以 Cloudflare Secret 形式加密存储，不进代码 |
 | **Cron** | Cloudflare Triggers（每 30 分钟） |
