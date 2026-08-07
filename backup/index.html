@@ -75,7 +75,7 @@
 
 <script>
 const POLL_MS = 30 * 60 * 1000;
-const IS_GH = true; // docs/ = GitHub Pages 只读快照版，始终隐藏刷新按钮
+const IS_GH = location.hostname.includes('github.io');
 if(IS_GH){ const _b=document.getElementById('refreshBtn'); if(_b) _b.style.display='none'; }   // 30 分钟自动轮询
 let timer = null;
 
@@ -107,20 +107,11 @@ async function load(){
   const btn = document.getElementById('refreshBtn');
   btn.disabled = true; btn.textContent = '加载中…';
   try{
-    // 双路径容错：先读本地快照 ./data.json，失败再回退 /api/data（Worker）。
-    // 不依赖 hostname 判断，自定义域名 / github.io / workers.dev 全部自适应。
-    const _urls = ['./data.json', '/api/data'];
-    let data = null, lastErr = null;
-    for(const _u of _urls){
-      try{
-        const r = await fetch(_u + '?_=' + Date.now(), {cache:'no-store'});
-        const txt = await r.text();
-        data = JSON.parse(txt);
-        if(data.error){ throw new Error(data.error); }
-        break;
-      }catch(e){ lastErr = e; }
-    }
-    if(!data) throw lastErr;
+    const _url = (IS_GH ? './data.json' : '/api/data') + '?_=' + Date.now();
+    const r = await fetch(_url, {cache:'no-store'});
+    const txt = await r.text();
+    const data = JSON.parse(txt);
+    if(data.error){ throw new Error(data.error); }
     render(data);
     setStatus(true);
   }catch(e){
