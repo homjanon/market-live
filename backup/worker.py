@@ -25,6 +25,129 @@ from datetime import datetime, timezone, timedelta
 from workers import WorkerEntrypoint, Response, fetch as http_fetch, Request as WorkersRequest
 
 KV_KEY = "market_snapshot"
+
+# ---------------- 年内涨跌幅（YTD）基数 ----------------
+# 思路：每年首次运行从日K自动取「当年首个交易日收盘价」作基数存入 KV（key 带年份），
+# 之后每次运行读 KV 计算 ytd = (现价/基数-1)*100%，跨年自动生成新基数、零人工维护。
+YTD_BASE_KV_PREFIX = "ytd_base_"          # + 年份，如 ytd_base_2026
+
+# 各标的的日K取数源：
+#  A股(新浪日K) / 港股+全球+汇率(东财日K) / 美股(雅虎1y) / 商品(新浪期货日K)
+YTD_SINA_KL = {                              # name -> 新浪 symbol（与 fetch_sina_kline 一致）
+    "上证指数": "sh000001", "深证成指": "sz399001", "创业板指": "sz399006",
+    "沪深300": "sh000300", "科创50": "sh000688", "北证50": "bj899050",
+    "红利低波ETF易方达": "sh563020", "30年国债ETF博时": "sh511130",
+}
+YTD_EM_KL = {                                # name -> 东财 secid（港股/全球/汇率）
+    "恒生指数": "100.HSI", "恒生科技": "124.HSTECH", "恒生国企指数": "100.HSCEI",
+    "日经225": "100.N225", "韩国KOSPI": "100.KS11", "德国DAX": "100.GDAXI",
+    "欧洲斯托克600": "100.SXXP", "法国CAC40": "100.FCHI", "英国富时100": "100.FTSE",
+    "美元离岸人民币": "133.USDCNH",
+}
+YTD_US_YAHOO = {                             # name -> Yahoo symbol（美股指数/ETF）
+    "标普500": "%5EGSPC", "纳斯达克100": "%5ENDX", "纳斯达克综合": "%5EIXIC",
+    "道琼斯": "%5EDJI", "美国红利指数ETF(SCHD)": "SCHD", "半导体ETF": "SOXX",
+}
+# 商品暂以新浪日K（未验证 hf_ K线）→ 该列显示"—"，见 build_snapshot 处理
+YTD_NO_BASE = {"WTI原油", "COMEX黄金", "布伦特原油", "白银",
+               "标普500期货", "纳指100期货"}
+
+def _ytd_year():
+    return beijing_now().strftime("%Y")
+
+async def fetch_sina_ytd_base(symbol):
+    """新浪日K：取当年首个交易日收盘价。"""
+    url = (f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/"
+           f"CN_MarketData.getKLineData?symbol={symbol}&scale=240&ma=no&datalen=320")
+    d = jload(await http_get(url, ref="https://finance.sina.com.cn"))
+    if not isinstance(d, list) or not d:
+        return None
+    y = _ytd_year()
+    for r in d:
+        if r.get("day", "").startswith(y):
+            try: return float(r["close"])
+            except (ValueError, TypeError): return None
+    return None
+
+async def fetch_em_ytd_base(secid):
+    """东财日K：当年首个交易日收盘价。"""
+    url = (f"https://push2his.eastmoney.com/api/qt/stock/kline/get?"
+           f"secid={secid}&fields1=f1,f2,f3&fields2=f51,f53&klt=101&fqt=0"
+           f"&beg={_ytd_year()}0101&end={_ytd_year()}1231&lmt=5")
+    d = jload(await http_get(url))
+    klines = ((d.get("data") or {}).get("klines")) or []
+    if not klines:
+        return None
+    first = klines[0].split(",")
+    try: return float(first[1])
+    except (ValueError, IndexError): return None
+
+async def fetch_yahoo_ytd_base(sym):
+    """Yahoo 日K range=1y：当年首个交易日收盘价。"""
+    url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
+           f"?interval=1d&range=1y")
+    r = jload(await http_get(url, ref="https://finance.yahoo.com"))
+    res = ((r.get("chart") or {}).get("result") or [{}])[0]
+    ts = (res.get("timestamp") or [])
+    cl = ((res.get("indicators") or {}).get("quote") or [{}])[0].get("close") or []
+    y = _ytd_year()
+    for t, c in zip(ts, cl):
+        import datetime as _dt
+        if _dt.datetime.fromtimestamp(t, tz=_dt.timezone.utc).strftime("%Y") == y and c is not None:
+            return float(c)
+    return None
+
+async def load_ytd_bases(env):
+    """读取 KV 中的当年基数表；不存在则全量抓取一次并写入。"""
+    year = _ytd_year()
+    key = YTD_BASE_KV_PREFIX + year
+    try:
+        raw = await env.KV.get(key)
+        if raw:
+            d = json.loads(raw)
+            if isinstance(d, dict) and d:
+                return d, True
+    except Exception:
+        pass
+    bases = {}
+    # 并发抓取三类源
+    async def _one(name, fetch_fn, arg):
+        try:
+            v = await fetch_fn(arg)
+            if v: bases[name] = v
+        except Exception:
+            pass
+    tasks = []
+    for n, sym in YTD_SINA_KL.items():
+        tasks.append(_one(n, fetch_sina_ytd_base, sym))
+    for n, sec in YTD_EM_KL.items():
+        tasks.append(_one(n, fetch_em_ytd_base, sec))
+    for n, sym in YTD_US_YAHOO.items():
+        tasks.append(_one(n, fetch_yahoo_ytd_base, sym))
+    await asyncio.gather(*tasks)
+    try:
+        await env.KV.put(key, json.dumps(bases))
+    except Exception:
+        pass
+    return bases, False
+
+
+def attach_ytd(snap, bases):
+    """给快照各板块条目附加 ytd 字段（年内涨跌幅，%）。基数缺失显示 None。"""
+    year = _ytd_year()
+    for d in (snap.get("indices") or {}).values():
+        name = d.get("name")
+        base = bases.get(name)
+        p = d.get("price")
+        d["ytd"] = round((p / base - 1) * 100, 2) if (base and p) else None
+    for d in (snap.get("commodities") or {}).values():
+        d["ytd"] = None   # 商品暂未接年初基数
+    for d in (snap.get("us_quotes") or []) or []:
+        name = d.get("name")
+        base = bases.get(name)
+        p = d.get("price")
+        d["ytd"] = round((p / base - 1) * 100, 2) if (base and p) else None
+    return snap
 SH_AMT_CACHE_KV_KEY = "_sh_amt_cache"
 CRON_DIAG_KV = "_cron_diag"   # 定时触发诊断记录（成功/跳过/崩溃都留痕，便于排查）
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
@@ -841,10 +964,16 @@ async def build_snapshot(env):
         fetch_idx_chg(), fetch_etf_down_ratio(), fetch_valuation(),
         fetch_us_fear(), fetch_us_quotes())
 
+    # 年内涨跌幅：读取/生成当年基数，附加 ytd 字段
+    try:
+        ytd_bases, _cached = await load_ytd_bases(env)
+    except Exception:
+        ytd_bases = {}
     snap["indices"] = indices
     snap["commodities"] = commodities
     snap["valuation"] = valuation
     snap["us_quotes"] = us_quotes
+    attach_ytd(snap, ytd_bases)   # 附加年内涨跌幅（indices/commodities/us_quotes）
 
     # ---- XXFI 输入装配 ----
     xxfi_in = {
