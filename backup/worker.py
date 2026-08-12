@@ -33,6 +33,7 @@ YTD_SINA_KL = {
     "上证指数": "sh000001", "深证成指": "sz399001", "创业板指": "sz399006",
     "沪深300": "sh000300", "科创50": "sh000688", "北证50": "bj899050",
     "红利低波": "sh000069",   # 红利低波指数
+    "30年国债ETF": "sh511130", # 30年国债ETF（有K线可算年内）
 }
 YTD_EM_KL = {
     "恒生指数": "100.HSI", "恒生科技": "124.HSTECH", "恒生国企指数": "100.HSCEI",
@@ -67,13 +68,18 @@ async def fetch_em_ytd_base(secid):
     url = (f"https://push2his.eastmoney.com/api/qt/stock/kline/get?"
            f"secid={secid}&fields1=f1,f2,f3&fields2=f51,f53&klt=101&fqt=0"
            f"&beg={_ytd_year()}0101&end={_ytd_year()}1231&lmt=5")
-    d = jload(await http_get(url))
-    klines = ((d.get("data") or {}).get("klines")) or []
-    if not klines:
-        return None
-    first = klines[0].split(",")
-    try: return float(first[1])
-    except (ValueError, IndexError): return None
+    # 东财对海外 secid 偶发 520，重试 3 次
+    for i in range(3):
+        try:
+            d = jload(await http_get(url))
+            klines = ((d.get("data") or {}).get("klines")) or []
+            if klines:
+                first = klines[0].split(",")
+                return float(first[1])
+        except Exception:
+            pass
+        await asyncio.sleep(i * 0.5)
+    return None
 
 async def fetch_yahoo_ytd_base(sym):
     url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
@@ -90,16 +96,7 @@ async def fetch_yahoo_ytd_base(sym):
     return None
 
 async def load_ytd_bases(env):
-    year = _ytd_year()
-    key = YTD_BASE_KV_PREFIX + year
-    try:
-        raw = await env.KV.get(key)
-        if raw:
-            d = json.loads(raw)
-            if isinstance(d, dict) and d:
-                return d
-    except Exception:
-        pass
+    """每次运行重新抓取年初基数（不缓存），基数一年内不变，ytd 随当前价实时变化。"""
     bases = {}
     async def _one(name, fetch_fn, arg):
         try:
@@ -115,10 +112,6 @@ async def load_ytd_bases(env):
     for n, sym in YTD_US_YAHOO.items():
         tasks.append(_one(n, fetch_yahoo_ytd_base, sym))
     await asyncio.gather(*tasks)
-    try:
-        await env.KV.put(key, json.dumps(bases))
-    except Exception:
-        pass
     return bases
 
 
@@ -150,6 +143,7 @@ INDEX_MAP = {
     "科创50":     ("1.000688", "A"),
     "北证50":     ("0.899050", "A"),
     "红利低波": ("2.H30269", "A"),
+    "30年国债ETF": ("1.511130", "A"),
     "恒生指数":   ("100.HSI",  "H"),
     "恒生科技":   ("124.HSTECH", "H"),
     "恒生国企指数": ("100.HSCEI", "H"),
@@ -162,7 +156,7 @@ INDEX_MAP = {
 }
 # 全球/美股额外展示（已含于上表，这里仅分类）
 GROUPS = {
-    "A":  ["上证指数", "深证成指", "创业板指", "沪深300", "科创50", "北证50", "红利低波", "30年国债期货"],
+    "A":  ["上证指数", "深证成指", "创业板指", "沪深300", "科创50", "北证50", "红利低波", "30年国债ETF", "30年国债期货"],
     "H":  ["恒生指数", "恒生科技", "恒生国企指数"],
     "G":  ["日经225", "韩国KOSPI", "德国DAX", "欧洲斯托克600", "法国CAC40", "英国富时100"],
 }
