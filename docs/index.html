@@ -71,7 +71,7 @@
 
   <div id="degraded" class="degraded" style="display:none"></div>
   <div id="content"></div>
-  <div class="foot">数据源自东财 / 新浪 / 蛋卷 · 自算小旭恐惧指数(XXFI)与A股冰点 · GitHub Pages 国内直连版 · 仅供研究，非投资建议</div>
+  <div class="foot">数据源自东财 / 新浪 / Yahoo / 蛋卷 · 自算小旭恐惧指数(XXFI)与A股冰点 · GitHub Pages 国内直连版 · 仅供研究，非投资建议</div>
 
 <script>
 const POLL_MS = 30 * 60 * 1000;
@@ -164,7 +164,7 @@ function render(d){
 
   let h = '';
   h += renderXXFI(d.xxfi);
-  h += renderBingdian(d.bingdian, d.breadth_source);
+  h += renderBingdian(d.bingdian);
   h += renderUSFear(d.us_fear);
   h += renderMarketTables(d);
   document.getElementById('content').innerHTML = h;
@@ -198,12 +198,9 @@ function renderXXFI(x){
   </div>`;
 }
 
-function renderBingdian(b, src){
+function renderBingdian(b){
   if(!b) return '';
   const color = b.verdict ? 'var(--up)' : 'var(--sub)';
-  const srcTxt = src === 'legu' ? 'legu（乐咕·全市场）'
-               : src === 'em_fallback' ? '东财分页（边缘覆盖不全·降级）'
-               : (src || '—');
   const dims = (b.dimensions||[]).map(dm=>{
     let pc='na', pt='—';
     if(dm.pass === true){ pc='ok'; pt='✔ 满足'; }
@@ -219,7 +216,6 @@ function renderBingdian(b, src){
     <h2>🧊 A股冰点判定 <span class="tag">四维度全满足=冰点</span></h2>
     <div class="ice-verdict" style="color:${color}">${b.verdict_emoji} ${b.verdict_text}</div>
     <div style="text-align:center;color:var(--sub);font-size:12px;margin-bottom:6px">${b.verdict_full||''}</div>
-    <div style="text-align:center;color:var(--sub);font-size:11px;margin-bottom:8px">广度来源：${srcTxt}</div>
     ${dims}
   </div>`;
 }
@@ -270,16 +266,15 @@ function renderUSQuotes(list){
       <td class="${colorCls(o.ytd)}">${fmtYtd(o.ytd)}</td></tr>`;
   }).join('');
   return `<div class="card">
-    <h2>美股 <span class="tag">指数/ETF=Yahoo · 期货=新浪</span></h2>
+    <h2>美股 <span class="tag">Yahoo Finance</span></h2>
     <table><tr><th>名称</th><th>最新价</th><th>涨跌幅</th><th>年内</th></tr>${rows}</table>
-    <div style="font-size:11px;color:var(--sub);margin-top:6px">Yahoo 取不到时该行留空（无兜底源）</div>
   </div>`;
 }
 
 function renderMarketTables(d){
   const idx = d.indices || {};
   const grp = {
-    'A股': ['上证指数','深证成指','创业板指','沪深300','科创50','北证50','红利低波','30年国债ETF','30年国债期货'],
+    'A股': ['上证指数','深证成指','创业板指','沪深300','科创50','北证50','红利低波','30年国债ETF','十年国债ETF'],
     '港股': ['恒生指数','恒生科技','恒生国企指数'],
     '全球': ['日经225','韩国KOSPI','德国DAX','欧洲斯托克600','法国CAC40','英国富时100'],
   };
