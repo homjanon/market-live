@@ -64,13 +64,11 @@
 - 仅以 `is_tx_today()` 判定是否为交易日（legu 页面统计日期校验，含调休/节假日自动跳过）；
 - 窗口判断 `in_trading_window()` 已移除，不再作为独立守卫。
 
-> 注：2026-07-24 修复 —— `scheduled` 改由 `self.env` 取绑定（原位置参数 env 静默失效），并补全 `GITHUB_TOKEN` secret，GitHub Pages 自动推送恢复。
-
 ---
 
 ## 数据板块
 
-### 📈 A 股（6 只）
+### 📈 A 股（9 只）
 
 | 指数 | 来源 | secid |
 |---|---|---|
@@ -80,6 +78,8 @@
 | 沪深300 | 东方财富 push2delay | `1.000300` |
 | 科创50 | 东方财富 push2delay | `1.000688` |
 | **北证50** | 东方财富 push2delay | `0.899050` |
+| **30年国债ETF** | 东方财富 push2delay | `1.511130` |
+| **十年国债ETF** | 东方财富 push2delay | `1.511260` |
 
 ### 📊 港股（2 只）
 
@@ -189,6 +189,48 @@
 | 恒生科技 | 蛋卷基金 index_eva |
 | 沪深300 | 蛋卷基金 index_eva |
 
+### 年内涨跌幅（YTD）
+
+各表格「年内」列的计算方式：
+
+```
+年内涨跌幅 = (当前价 ÷ 当年首个交易日收盘价 − 1) × 100%
+```
+
+- 年初基数**一年不变**，年内只随当前价实时变化，不重复抓取；
+- 「当年首个交易日」按各市场实际开市日：A股/日经 = 01-05，港股/全球/美股 = 01-02，离岸人民币 = 01-01（元旦不休市）。
+
+#### 年初基数来源（2026-08-12 起生效）
+
+**统一策略：Yahoo 优先（range=ytd 一次取当年首个交易日收盘），失败降级原源 → 静态表 → 留空**。
+
+| 分组 | 品种 | 基数来源（优先级） | 年初基数 |
+|---|---|---|---|
+| A股 | 上证/深成/创业板/沪深300/科创50/北证50/30年国债ETF/十年国债ETF | 新浪 A股日K（`CN_MarketData.getKLineData`，保持不变） | 动态抓取 |
+| A股 | 红利低波 | **东财 2.H30269**（与实时价同源；新浪 sh000069 是另一指数，已弃用） | 11235.18 |
+| 港股 | 恒生/恒生科技/恒生国企 | 东财日K（push2his kline/get，保持不变） | 26338.47 / 5736.44 / 9168.99 |
+| 全球 | 日经225/韩国KOSPI/德国DAX/法国CAC40/英国富时100 | **Yahoo → 东财日K兜底** | 动态抓取 |
+| 全球 | 欧洲斯托克600 | **Yahoo `^STOXX`**（东财不可靠已弃用；静态值 596.14 有误已修正） | 601.76 |
+| 汇率 | 美元离岸人民币 | 东财日K（保持不变，Yahoo 无 CNH） | 6.9799（01-01收盘） |
+| 美股 | 标普500/纳指100/纳指综合/道琼斯/SCHD/SOXX | **Yahoo（^GSPC/^NDX/^IXIC/^DJI/SCHD/SOXX）→ 新浪美股日K兜底** | 动态抓取 |
+| 美股 | 标普500期货/纳指100期货 | **Yahoo（ES=F / NQ=F）** | 6900.50 / 25385.25 |
+| 大宗 | WTI原油/COMEX黄金/布伦特原油/白银 | **Yahoo（CL=F / GC=F / BZ=F / SI=F）** | 57.32 / 4314.40 / 60.75 / 70.56 |
+> Yahoo 请求需带 UA + Referer 头（`https://finance.yahoo.com`），否则 403/429。
+
+#### 缓存与兜底机制
+
+```
+每次运行 load_ytd_bases():
+  1) 读 KV ytd_base_{年份}（如 ytd_base_2026）
+  2) 仅对 KV 缺失的品种增量抓取（新浪A股 / 东财 / 新浪美股）
+  3) 仍缺失且静态表 YTD_BASE_STATIC 有值 → 用静态值兜底（不覆盖动态抓取值）
+  4) 整表写回 KV
+```
+
+- **年内不变**：基数当年首个交易日抓取一次后写入 KV，后续运行直接读 KV，不再重复请求外部接口（也避免了新浪美股 300–600KB 大响应的重复开销）；
+- **跨年自动重置**：年份换 key（`ytd_base_2027`），2027 年首个交易日自动全量重抓，无需手动干预；
+- **静态表兜底**：东财海外 secid 偶发 520/断连时，港股/全球/美股年内仍可正常显示。
+
 ---
 
 ## 文件结构
@@ -257,9 +299,11 @@ CLOUDFLARE_API_TOKEN="..." CLOUDFLARE_ACCOUNT_ID="..." uv run pywrangler deploy
 |---|---|
 | `/api/data` | 返回当前快照（直接读取 KV，无需重新抓取） |
 | `/api/refresh` | 手动刷新：同步构建并写入 KV、推送 GitHub Pages（等价于 Cron 跑的逻辑） |
-| `/api/cron_diag` | 定时触发诊断：返回最近一次 Cron 的状态（`enter` / `dispatched` / `error`），含 `in_window`、`is_tx`、`err`、`tb` 字段，用于排查“自动触发没跑”问题 |
+| `/api/cron_diag` | 定时触发诊断：返回最近一次 Cron 的状态（`enter` / `dispatched` / `error`），含 `is_tx`、`err`、`tb` 字段（GitHub 推送状态见 `_gh_diag`），用于排查“自动触发没跑”问题 |
 
-**Cron 健壮性**：`scheduled()` 采用 `controller.waitUntil` 优先、回退 `self.ctx.waitUntil`、最终兜底直接 `await` 的三重写法，且全程 `try/except` 把异常写入 KV（`_cron_diag`），**不再静默失败**。
+**Cron 健壮性**：`scheduled(self, controller, env, ctx)` 按 Cloudflare 运行时签名接收 4 个位置参数；绑定一律通过 `self.env` 获取——位置参数里的 `env` 在 Python Workers 的 scheduled 上下文并非真实绑定对象，曾导致 KV / GitHub 写操作静默失败。全程 `try/except` 把状态写入 KV：`_cron_diag`（定时触发 `enter`/`skipped`/`dispatched`/`error`）与 `_gh_diag`（GitHub 推送 `no_token`/`error`/`ok`），**不再静默失败**。
+> **2026-07-24 修复记录**：① `scheduled` 改由 `self.env` 取绑定（原位置参数 `env` 静默失效）；② 补全 `GITHUB_TOKEN` secret，GitHub Pages 自动推送恢复；③ 新增 `_cron_diag` / `_gh_diag` 诊断留痕。
+
 
 ---
 
