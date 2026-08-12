@@ -89,6 +89,10 @@ function fmtPct(v){
   if(v === null || v === undefined || isNaN(v)) return '—';
   return (v>0?'+':'') + v.toFixed(2) + '%';
 }
+function fmtYtd(v){
+  if(v === null || v === undefined || isNaN(v)) return '—';
+  return (v>0?'+':'') + v.toFixed(2) + '%';
+}
 function fmtNum(v, d=2){
   if(v === null || v === undefined || isNaN(v)) return '—';
   return Number(v).toLocaleString('zh-CN', {minimumFractionDigits:d, maximumFractionDigits:d});
@@ -259,14 +263,15 @@ function renderUSQuotes(list){
   const rows = ORDER.map(nm=>{
     const o = byName[nm];
     if(!o){
-      return `<tr><td>${nm}</td><td class="flat">—</td><td class="flat">—</td></tr>`;
+      return `<tr><td>${nm}</td><td class="flat">—</td><td class="flat">—</td><td class="flat">—</td></tr>`;
     }
-    return `<tr><td>${o.name}${o.name.includes('期货')?'<span class="tag">期货</span>':''}</td>
-      <td>${fmtNum(o.price)}</td><td class="${colorCls(o.chg)}">${fmtPct(o.chg)}</td></tr>`;
+    return `<tr><td>${o.name}${o.source==='sina hf_'?'<span class="tag">期货</span>':''}</td>
+      <td>${fmtNum(o.price)}</td><td class="${colorCls(o.chg)}">${fmtPct(o.chg)}</td>
+      <td class="${colorCls(o.ytd)}">${fmtYtd(o.ytd)}</td></tr>`;
   }).join('');
   return `<div class="card">
-    <h2>美股 <span class="tag">指数/ETF/期货=Yahoo</span></h2>
-    <table><tr><th>名称</th><th>最新价</th><th>涨跌幅</th></tr>${rows}</table>
+    <h2>美股 <span class="tag">指数/ETF=Yahoo · 期货=新浪</span></h2>
+    <table><tr><th>名称</th><th>最新价</th><th>涨跌幅</th><th>年内</th></tr>${rows}</table>
     <div style="font-size:11px;color:var(--sub);margin-top:6px">Yahoo 取不到时该行留空（无兜底源）</div>
   </div>`;
 }
@@ -274,7 +279,7 @@ function renderUSQuotes(list){
 function renderMarketTables(d){
   const idx = d.indices || {};
   const grp = {
-    'A股': ['上证指数','深证成指','创业板指','沪深300','科创50','北证50','红利低波','30年国债期货'],
+    'A股': ['上证指数','深证成指','创业板指','沪深300','科创50','北证50','红利低波ETF易方达','30年国债ETF博时'],
     '港股': ['恒生指数','恒生科技','恒生国企指数'],
     '全球': ['日经225','韩国KOSPI','德国DAX','欧洲斯托克600','法国CAC40','英国富时100'],
   };
@@ -284,23 +289,26 @@ function renderMarketTables(d){
     const rows = names.filter(n=>idx[n]).map(n=>{
       const o = idx[n];
       return `<tr><td>${o.name}</td><td>${fmtNum(o.price)}</td>
-        <td class="${colorCls(o.chg)}">${fmtPct(o.chg)}</td></tr>`;
+        <td class="${colorCls(o.chg)}">${fmtPct(o.chg)}</td>
+        <td class="${colorCls(o.ytd)}">${fmtYtd(o.ytd)}</td></tr>`;
     }).join('');
     h += `<div class="sec-title">${title}</div>
       <div class="card" style="padding:6px 14px"><table>
-      <tr><th>指数</th><th>最新价</th><th>涨跌幅</th></tr>${rows}</table></div>`;
+      <tr><th>指数</th><th>最新价</th><th>涨跌幅</th><th>年内</th></tr>${rows}</table></div>`;
     if(title === '港股'){ h += renderUSQuotes(usq); }   // 美股卡片：港股下方、全球上方
   }
   // 商品 + 人民币
   const cm = d.commodities || {};
   const fx = idx['美元离岸人民币'];
   const crow = Object.keys(cm).map(n=>`<tr><td>${cm[n].name}</td><td>${fmtNum(cm[n].price)}</td>
-    <td class="${colorCls(cm[n].chg)}">${fmtPct(cm[n].chg)}</td></tr>`).join('');
+    <td class="${colorCls(cm[n].chg)}">${fmtPct(cm[n].chg)}</td>
+    <td class="${colorCls(cm[n].ytd)}">${fmtYtd(cm[n].ytd)}</td></tr>`).join('');
   const fxrow = fx ? `<tr><td>美元离岸人民币</td><td>${fmtNum(fx.price)}</td>
-    <td class="${colorCls(fx.chg)}">${fmtPct(fx.chg)}</td></tr>` : '';
+    <td class="${colorCls(fx.chg)}">${fmtPct(fx.chg)}</td>
+    <td class="${colorCls(fx.ytd)}">${fmtYtd(fx.ytd)}</td></tr>` : '';
   h += `<div class="sec-title">大宗商品 / 汇率</div>
     <div class="card" style="padding:6px 14px"><table>
-    <tr><th>品种</th><th>最新价</th><th>涨跌幅</th></tr>${crow}${fxrow}</table></div>`;
+    <tr><th>品种</th><th>最新价</th><th>涨跌幅</th><th>年内</th></tr>${crow}${fxrow}</table></div>`;
   // 估值
   const va = d.valuation || {};
   const vrow = Object.keys(va).map(n=>{
