@@ -107,13 +107,19 @@
 | **法国CAC40** | 东方财富 push2delay | `100.FCHI` |
 | **英国富时100** | 东方财富 push2delay | `100.FTSE` |
 
-### 🛢️ 大宗商品（3 只）
+### 🛢️ 大宗商品和其他（7 只）
 
 | 品种 | 来源 | symbol |
 |---|---|---|
 | WTI 原油 | 新浪 hf\_ | `hf_CL` |
 | COMEX 黄金 | 新浪 hf\_ | `hf_GC` |
 | 布伦特原油 | 新浪 hf\_ | `hf_OIL` |
+| 白银 | 新浪 hf\_ | `hf_SI` |
+| 比特币 | Yahoo v8 chart | `BTC-USD`（7×24 报价）|
+| 以太坊 | Yahoo v8 chart | `ETH-USD`（7×24 报价）|
+| 美元指数 | Yahoo v8 chart | `DX-Y.NYB` |
+
+> 2026-08-23 起板块更名「大宗商品和其他」：白银并入展示，新增虚拟币（比特币/以太坊）与美元指数，均走 Yahoo 实时价 + YTD 统一规则。
 
 ### 💱 汇率（1 只）
 
@@ -215,6 +221,7 @@
 | 美股 | 标普500/纳指100/纳指综合/道琼斯/SCHD/SOXX | **Yahoo（^GSPC/^NDX/^IXIC/^DJI/SCHD/SOXX）→ 新浪美股日K兜底** | 动态抓取 |
 | 美股 | 标普500期货/纳指100期货 | **Yahoo（ES=F / NQ=F）** | 6900.50 / 25385.25 |
 | 大宗 | WTI原油/COMEX黄金/布伦特原油/白银 | **Yahoo（CL=F / GC=F / BZ=F / SI=F）** | 57.32 / 4314.40 / 60.75 / 70.56 |
+| 其他 | 比特币/以太坊/美元指数 | **Yahoo（BTC-USD / ETH-USD / DX-Y.NYB）** | 88731.98 / 3000.39 / 98.42 |
 > Yahoo 请求需带 UA + Referer 头（`https://finance.yahoo.com`），否则 403/429。
 
 #### 缓存与兜底机制
