@@ -80,21 +80,30 @@
 | **北证50** | 东方财富 push2delay | `0.899050` |
 | **30年国债ETF** | 东方财富 push2delay | `1.511130` |
 | **十年国债ETF** | 东方财富 push2delay | `1.511260` |
+| **红利低波** | 东方财富 push2delay | `2.H30269` |
 
-### 📊 港股（2 只）
+### 📊 港股（3 只）
 
 | 指数 | 来源 | secid |
 |---|---|---|
 | 恒生指数 | 东方财富 push2delay | `100.HSI` |
 | 恒生科技 | 东方财富 push2delay | `124.HSTECH` |
+| **恒生国企指数** | 东方财富 push2delay | `100.HSCEI` |
 
-### 🇺🇸 美股（3 只）
+### 🇺🇸 美股（8 只）
 
-| 指数 | 来源 | secid |
+> 实时价全部取自 **Yahoo Finance v8 chart**（非东财），与 YTD 基数同源。
+
+| 指数/品种 | 来源 | symbol |
 |---|---|---|
-| 纳斯达克100 | 东方财富 push2delay | `100.NDX` |
-| 标普500 | 东方财富 push2delay | `100.SPX` |
-| 道琼斯 | 东方财富 push2delay | `100.DJIA` |
+| 标普500 | Yahoo v8 chart | `^GSPC` |
+| 纳斯达克100 | Yahoo v8 chart | `^NDX` |
+| 纳斯达克综合 | Yahoo v8 chart | `^IXIC` |
+| 道琼斯 | Yahoo v8 chart | `^DJI` |
+| 美国红利指数ETF(SCHD) | Yahoo v8 chart | `SCHD` |
+| 半导体ETF | Yahoo v8 chart | `SOXX` |
+| 标普500期货 | Yahoo v8 chart | `ES=F` |
+| 纳指100期货 | Yahoo v8 chart | `NQ=F` |
 
 ### 🌍 全球（6 只）
 
