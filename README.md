@@ -62,7 +62,7 @@
 
 ## 数据板块
 
-### 📈 A 股（9 只）
+### 📈 A 股（10 只）
 
 | 指数 | 来源 | secid |
 |---|---|---|
@@ -72,24 +72,33 @@
 | 沪深300 | 东方财富 push2delay | `1.000300` |
 | 科创50 | 东方财富 push2delay | `1.000688` |
 | **北证50** | 东方财富 push2delay | `0.899050` |
+| **红利低波** | 东方财富 push2delay | `2.H30269` |
 | **30年国债ETF** | 东方财富 push2delay | `1.511130` |
 | **十年国债ETF** | 东方财富 push2delay | `1.511260` |
 | **富时A50期指** | 东方财富 push2delay | `104.CN00Y` |
 
-### 📊 港股（2 只）
+### 📊 港股（3 只）
 
 | 指数 | 来源 | secid |
 |---|---|---|
 | 恒生指数 | 东方财富 push2delay | `100.HSI` |
 | 恒生科技 | 东方财富 push2delay | `124.HSTECH` |
+| 恒生国企指数 | 东方财富 push2delay | `100.HSCEI` |
 
-### 🇺🇸 美股（3 只）
+### 🇺🇸 美股（8 只）
 
-| 指数 | 来源 | secid |
+| 品种 | 来源（主 → 兜底）| symbol |
 |---|---|---|
-| 纳斯达克100 | 东方财富 push2delay | `100.NDX` |
-| 标普500 | 东方财富 push2delay | `100.SPX` |
-| 道琼斯 | 东方财富 push2delay | `100.DJIA` |
+| 标普500 | Yahoo v8 chart → 腾讯 usINX | `^GSPC` |
+| 纳斯达克100 | Yahoo v8 chart → 腾讯 usNDX | `^NDX` |
+| 纳斯达克综合 | Yahoo v8 chart → 腾讯 usIXIC | `^IXIC` |
+| 道琼斯 | Yahoo v8 chart → 腾讯 usDJI | `^DJI` |
+| 美国红利指数ETF(SCHD) | Yahoo v8 chart → 腾讯 usSCHD | `SCHD` |
+| 半导体ETF | Yahoo v8 chart → 腾讯 usSOXX | `SOXX` |
+| 标普500期货 | Yahoo v8 chart → 新浪 hf\_ES | `ES=F` |
+| 纳指100期货 | Yahoo v8 chart → 新浪 hf\_NQ | `NQ=F` |
+
+> 2026-09-03 起加兜底：Yahoo 被 Cloudflare 出口 IP 限流时，指数/ETF 自动切腾讯 qt.gtimg.cn（usXXX），期货切新浪 hf\_；VXN/虚拟币保持 Yahoo-only。
 
 ### 🌍 全球（6 只）
 
@@ -176,7 +185,7 @@
 
 | 指标 | 含义 | 数据源 | 解读区间 |
 |---|---|---|---|
-| **VIX** | 标普500 30天隐波 | Yahoo Finance | ≥40极度恐慌 / ≥30恐慌 / ≥25偏恐慌 / ≥20偏高 / ≥15正常 / ≥12偏低 / <12极低贪婪 |
+| **VIX** | 标普500 30天隐波 | Yahoo → 腾讯 usVIX 兜底 | ≥40极度恐慌 / ≥30恐慌 / ≥25偏恐慌 / ≥20偏高 / ≥15正常 / ≥12偏低 / <12极低贪婪 |
 | **VXN** | 纳斯达克100 30天隐波 | Yahoo Finance | 同上（纳指波动率通常高于标普） |
 | **CNN Fear & Greed** | 7因子恐惧贪婪指数（0–100） | CNN dataviz API | ≤25极度恐慌 / ≤45恐慌 / ≤55中性 / ≤75贪婪 / >75极度贪婪 |
 
