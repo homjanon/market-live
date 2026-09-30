@@ -186,8 +186,7 @@ function renderXXFI(x){
       <div class="xxfi-num" style="color:${x.XXFI>=60?'var(--up)':x.XXFI>=40?'var(--sub)':'var(--down)'}">${x.XXFI}</div>
       <div class="xxfi-side">
         <span class="badge ${bc}">${x.contrarian_signal} · ${bl}</span>
-        <div class="sig">贪婪指数 ${x.GreedIndex} ｜ 等级：${x.level}</div>
-        <div class="sig">背离：${x.divergence_state||'—'}${x.divergence!=null?('（'+x.divergence+'）'):''}</div>
+        <div class="sig">恐惧等级：${x.level}</div>
       </div>
     </div>
     <div class="bars">
