@@ -1,7 +1,4 @@
-# market-live · 实时市场看板
 
-> **国内直连**：https://homjanon.github.io/market-live/（GitHub Pages，中国内地直连）  
-> **VPN**：https://market-live.homjanon.workers.dev（Cloudflare Worker，含手动刷新按钮）
 
 实时展示 A 股、港台、美股、全球主要指数、大宗商品、汇率、估值水位，并自算**小旭恐惧指数（XXFI）** 与 **A 股冰点**参考指标。
 
