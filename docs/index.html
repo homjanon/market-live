@@ -75,6 +75,10 @@
 
 <script>
 const POLL_MS = 30 * 60 * 1000;
+// 自动重拉窗口（北京时间，每天）：与 Worker cron `15,45 23,0-15 * * *` 严格对齐
+const POLL_HM = [7*60+15, 23*60+45];
+// 主要市场交易时段（北京时间，周一~周五）：仅用于状态文案，不参与轮询判断
+const TX_HM = [9*60+30, 16*60+15];
 const IS_GH = location.hostname.includes('github.io');
 if(IS_GH){ const _b=document.getElementById('refreshBtn'); if(_b) _b.style.display='none'; }   // 30 分钟自动轮询
 let timer = null;
@@ -98,13 +102,21 @@ function fmtNum(v, d=2){
   return Number(v).toLocaleString('zh-CN', {minimumFractionDigits:d, maximumFractionDigits:d});
 }
 
-// 京时间交易时段判断（与 Worker 一致：周一~周五 9:30–16:00）
-function inWindow(){
+// 当前北京时间 → { 星期(0=日), 当日分钟数 }
+function bjMin(){
   const bj = new Date(Date.now() + 8*3600*1000);
-  const wd = bj.getUTCDay(); // 0=日
-  if(wd === 0 || wd === 6) return false;
-  const hm = bj.getUTCHours()*60 + bj.getUTCMinutes();
-  return hm >= 9*60+30 && hm <= 16*60+15;
+  return { wd: bj.getUTCDay(), hm: bj.getUTCHours()*60 + bj.getUTCMinutes() };
+}
+// 是否在【自动重拉窗口】内：每天 7:15–23:45（与 Worker cron 同步；跨年/改窗口只改 POLL_HM）
+function inWindow(){
+  const t = bjMin();
+  return t.hm >= POLL_HM[0] && t.hm <= POLL_HM[1];
+}
+// 是否处于【主要市场交易时段】：周一~周五 9:30–16:15（只影响状态文案）
+function inTrading(){
+  const t = bjMin();
+  if(t.wd === 0 || t.wd === 6) return false;
+  return t.hm >= TX_HM[0] && t.hm <= TX_HM[1];
 }
 
 async function load(){
@@ -130,8 +142,9 @@ async function load(){
 function setStatus(ok, msg){
   const dot = document.getElementById('statusDot'), txt = document.getElementById('statusTxt');
   if(ok){
-    if(inWindow()){ dot.className='dot live'; txt.textContent='交易中 · 每30分钟自动刷新'; }
-    else { dot.className='dot sleep'; txt.textContent='非交易时段 · 数据冻结'; }
+    if(inTrading()){ dot.className='dot live'; txt.textContent='交易中 · 每30分钟自动刷新'; }
+    else if(inWindow()){ dot.className='dot sleep'; txt.textContent='非交易时段 · 每30分钟自动刷新'; }
+    else { dot.className='dot sleep'; txt.textContent='非刷新时段(7:15–23:45) · 可手动刷新'; }
   }else{
     dot.className='dot'; txt.textContent='异常：' + (msg||'未知');
   }
@@ -319,11 +332,14 @@ function renderMarketTables(d){
 }
 
 load();
-// 仅在交易时段内启动 30 分钟轮询；非交易时段靠手动刷新
-if(inWindow()){
-  timer = setInterval(load, POLL_MS);
-}
-// 切回前台时若已过很久也刷新一次
+// 定时器【无条件】启动，每次 tick 再判断是否在重拉窗口内。
+//   ⚠️ 不能把定时器包在窗口判断里：那样 23:50 打开页面，
+//      次日 7:15 起永远不会自动重拉（定时器压根没启动过）。
+timer = setInterval(()=>{
+  if(inWindow()) load();
+  else setStatus(true);   // 窗口外只刷状态文案，不取数
+}, POLL_MS);
+// 切回前台时若在窗口内也刷新一次（后台标签定时器会被浏览器节流，这里兜底）
 document.addEventListener('visibilitychange', ()=>{
   if(!document.hidden && inWindow()) load();
 });
