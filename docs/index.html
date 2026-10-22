@@ -155,7 +155,23 @@ async function manualRefresh(){
   btn.disabled = true; btn.textContent = '刷新中…';
   try{
     if(IS_GH){ alert('GitHub Pages 版为只读快照，刷新由 Cron 每30分钟自动完成。'); return; }
-    const r = await fetch('/api/refresh', {method:'POST', cache:'no-store'});
+    // 2026-10-22 v7：/api/refresh 已加鉴权（worker v14）——只认 POST + 请求头 X-ML-Key。
+    //   口令只走 header，不进 URL（不会进边缘日志、不会被 Referer 带出）。
+    //   首次点一次输入并存在本机；401 表示口令不对，清掉重输。
+    let k = localStorage.getItem('ml_refresh_key') || '';
+    if(!k){
+      k = (prompt('请输入刷新口令（只需一次，存在本机浏览器）') || '').trim();
+      if(!k){ return; }
+    }
+    const r = await fetch('/api/refresh', {method:'POST', cache:'no-store',
+                                          headers:{'X-ML-Key':k}});
+    if(r.status === 401){
+      localStorage.removeItem('ml_refresh_key');
+      alert('口令不正确（已清除本机记录），请再点一次「立即刷新」重新输入。');
+      return;
+    }
+    if(!r.ok){ throw new Error('HTTP ' + r.status); }
+    localStorage.setItem('ml_refresh_key', k);
     const data = await r.json();
     render(data);
     setStatus(true);
