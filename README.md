@@ -454,9 +454,9 @@ CLOUDFLARE_API_TOKEN="..." CLOUDFLARE_ACCOUNT_ID="..." uv run pywrangler deploy
 
 | 端点 | 作用 |
 |---|---|
-| `/api/data` | 返回当前快照（直接读取 KV，无需重新抓取）。**公开只读**，也是看数据源健康度的地方（`indices_source` / `src_trace` / `degraded`） |
+| `/api/data` | 返回当前快照（直接读取 KV，无需重新抓取）。**公开只读**，也是看数据源健康度的地方（`indices_source` / `src_trace` / `degraded`）。<br>⚠️ 2026-10-24 起**加了懒构建防抖**：KV 读空时先等 0.6 秒重读一次；仍空且 60 秒内刚刷过 → 返回 **503 `kv_warming`**（不重建，避免白烧一轮）；只有确认真的没数据才同步构建 |
 | `/api/refresh` | 手动刷新：同步构建并写入 KV、推送 GitHub Pages（等价于 Cron 跑的逻辑）。<br>🔒 **2026-10-22 起需鉴权**：只接受 `POST`（`GET` → 405），且必须带请求头 `X-ML-Key`（口令存 CF secret `ML_REFRESH_KEY`，**未配置 secret 时一律 401**，fail-closed）。<br>另有 **120 秒幂等闸门**：距上次手动刷新不足 120 秒时直接返回当前快照，不重跑、不推 GitHub、不写主快照 |
-| `/api/cron_diag` | 定时触发诊断（**健康摘要**）：`at` / `stage` / `last_snapshot_at` / `indices_count` / `missing_count` / `degraded` / `gh_push{readme,index}`。<br>2026-10-22 起**不再返回 `src_diag`**（与 `/api/data` 的 `src_trace`、`indices_source` 重复），`gh_push` 也去掉了 commit sha、`readme_b64_len` 与内部报错原文 |
+| `/api/cron_diag` | 定时触发诊断（**健康摘要**）：`at` / `stage` / `last_snapshot_at` / `indices_count` / `missing_count` / `degraded` / `gh_push{readme,index}` / **`refresh_log`**（最近 5 次刷新的来源留痕）。<br>2026-10-22 起**不再返回 `src_diag`**（与 `/api/data` 的 `src_trace`、`indices_source` 重复），`gh_push` 也去掉了 commit sha、`readme_b64_len` 与内部报错原文 |
 | ~~`/api/cron_run`~~ | **2026-10-22 已删除**。原因：`scheduled` 直接调 `_cron_run(real_env)`，从不经 HTTP —— 这个路由只是一个**无鉴权的写入口**（可触发完整 cron）。要手动刷新请用 `/api/refresh`（带口令） |
 
 **Cron 健壮性**：`scheduled(self, controller, env, ctx)` 按 Cloudflare 运行时签名接收 4 个位置参数；绑定一律通过 `self.env` 获取——位置参数里的 `env` 在 Python Workers 的 scheduled 上下文并非真实绑定对象，曾导致 KV / GitHub 写操作静默失败。全程 `try/except` 把状态写入 KV：`_cron_diag`（定时触发 `enter`/`skipped`/`dispatched`/`error`）与 `_gh_diag`（GitHub 推送 `no_token`/`error`/`ok`），**不再静默失败**。
@@ -469,6 +469,16 @@ CLOUDFLARE_API_TOKEN="..." CLOUDFLARE_ACCOUNT_ID="..." uv run pywrangler deploy
 > ③ 删除 `/api/cron_run`（`scheduled` 从不经 HTTP 调用它，纯冗余写入口）。
 > ④ `/api/cron_diag` 精简：不再回 `src_diag`，`gh_push` 只留 `ok/fail/skipped` 状态。
 > ⑤ 口径说明：`*.workers.dev` 不是 zone，**WAF / Rate Limiting / Cloudflare Access 三样都套不上** —— 因此这些保护只能写在 worker 代码里。
+
+> **2026-10-24 可观测性加固（worker v15）**：
+> 起因：**10-24 凌晨 03:41（窗口外）出现过一次计划外刷新**。排查发现「谁触发的」这个维度**从未落盘**：
+> `_cron_diag` 只在 cron 时写、`_gh_diag` / `_src_diag` 每轮被覆盖、CF Analytics 又不支持按 path/method 分组。
+> ① 新增 KV **`_refresh_log`**（滚动 20 条）：每次刷新记录 `src`（`cron` / `api-refresh` / `api-data-lazy`）、
+> `at`、`elapsed`、`country`、`ip_prefix`（**只留 IP 前三段**）、`ua`。`/api/cron_diag` 回最近 5 条。
+> ② `/api/data` **懒构建防抖**：读空先重试一次（0.6 秒）；仍空且 60 秒内刚刷过 → **503 `kv_warming`**
+> （KV 暂时读不到刚写的值，此时重建也无意义，反而白烧 32 次外部请求 + 1 个 commit）。
+> 📌 定位方法备忘：`subrequests`（对外取数次数）≈30~32 的那次请求**就是一次全量刷新**；
+> 正常 `GET /api/data` 命中快照时 `subrequests = 0`。
 
 
 ---
